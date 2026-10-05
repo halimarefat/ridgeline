@@ -1,0 +1,9 @@
+[package]
+name = "rl-coach"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+rl-json = { path = "../json" }
+rl-domain = { path = "../domain" }

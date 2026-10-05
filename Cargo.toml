@@ -1,0 +1,25 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/json",
+    "crates/domain",
+    "crates/device",
+    "crates/session",
+    "crates/storage",
+    "crates/coach",
+    "crates/app",
+    "apps/devserver",
+]
+# The desktop shell depends on third-party crates (tauri, btleplug, ...) and is
+# built in its own workspace. The core crates above use only the Rust standard
+# library so they build and test fully offline. See docs/adr/0002.
+exclude = ["apps/desktop/src-tauri"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[profile.release]
+opt-level = 3
+debug = false

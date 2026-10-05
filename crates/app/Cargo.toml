@@ -1,0 +1,13 @@
+[package]
+name = "rl-app"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+rl-json = { path = "../json" }
+rl-domain = { path = "../domain" }
+rl-device = { path = "../device" }
+rl-session = { path = "../session" }
+rl-storage = { path = "../storage" }
+rl-coach = { path = "../coach" }

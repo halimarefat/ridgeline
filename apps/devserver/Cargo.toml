@@ -1,0 +1,9 @@
+[package]
+name = "rl-devserver"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+rl-json = { path = "../../crates/json" }
+rl-app = { path = "../../crates/app" }
