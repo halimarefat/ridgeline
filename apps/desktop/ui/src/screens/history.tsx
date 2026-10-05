@@ -69,7 +69,7 @@ export function History() {
                 >
                   <div>
                     <div className="li-title">
-                      {a.meta.demo && <span className="demo-flag">DEMO</span>} {a.meta.title}
+                      {a.meta.demo && <span className="demo-flag">DEMO</span>} {a.meta.title.replace(/^\[Demo\]\s*/, "")}
                     </div>
                     <div className="li-meta">
                       <span>{dateTime(a.meta.start_utc)}</span>
@@ -120,7 +120,7 @@ function ActivityDetail({ id, version, onChanged }: { id: string; version: numbe
       <div className="panel-head">
         <div>
           <h2>
-            {m.demo && <span className="demo-flag">DEMO</span>} {m.title}
+            {m.demo && <span className="demo-flag">DEMO</span>} {m.title.replace(/^\[Demo\]\s*/, "")}
           </h2>
           <p className="small muted">
             {dateTime(m.start_utc)} · {MODE_LABEL[m.mode] ?? m.mode}
@@ -164,8 +164,8 @@ function ActivityDetail({ id, version, onChanged }: { id: string; version: numbe
         height={170}
         markers={markers}
         series={[
-          { index: 1, label: "Power", cls: "s-power" },
-          ...(hasTarget ? [{ index: 6, label: "Target", cls: "s-target" }] : []),
+          { index: 1, label: "Power", cls: "s-power", scale: "w" },
+          ...(hasTarget ? [{ index: 6, label: "Target", cls: "s-target", scale: "w" }] : []),
           { index: 2, label: "Heart rate", cls: "s-hr" },
           { index: 3, label: "Cadence", cls: "s-cad" },
         ]}
@@ -173,7 +173,7 @@ function ActivityDetail({ id, version, onChanged }: { id: string; version: numbe
       {(hasGrade || (a.line ?? []).length > 1) && (
         <>
           <h3>Route</h3>
-          <div className="grid-2" style={{ gridTemplateColumns: "1fr 1fr" }}>
+          <div className="grid-2" style={{ gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)" }}>
             <SeriesChart
               rows={a.series}
               height={150}
@@ -186,7 +186,7 @@ function ActivityDetail({ id, version, onChanged }: { id: string; version: numbe
           </div>
         </>
       )}
-      <div className="grid-2" style={{ gridTemplateColumns: "1fr 1fr", marginTop: 12 }}>
+      <div className="grid-2" style={{ gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)", marginTop: 12 }}>
         <div>
           <h3>Time in power zones</h3>
           {zones.length ? (

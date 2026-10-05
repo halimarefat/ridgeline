@@ -53,7 +53,7 @@ export function MapView(props: MapProps) {
   const map = useRef<maplibregl.Map | null>(null);
   const marker = useRef<maplibregl.Marker | null>(null);
   const wpMarkers = useRef<maplibregl.Marker[]>([]);
-  const [failed, setFailed] = useState<string | null>(props.enabled ? null : "Background map turned off in Settings.");
+  const [failed, setFailed] = useState<string | null>(props.synthetic ? "Synthetic test route: not a real place, so no background map." : props.enabled ? null : "Background map turned off in Settings.");
   const clickRef = useRef(props.onMapClick);
   clickRef.current = props.onMapClick;
   const h = props.height ?? 320;

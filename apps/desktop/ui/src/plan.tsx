@@ -14,7 +14,7 @@ export function IntensityTag({ v }: { v: string }) {
 
 export function SourceTag({ source, provider, model }: { source: string; provider?: string; model?: string }) {
   if (source === "ai") return <span className="tag tag-ai">AI · {[provider, model].filter(Boolean).join(" · ") || "model"}</span>;
-  if (source === "offline") return <span className="tag">Offline plan (rules-based, not an AI conversation)</span>;
+  if (source === "offline") return <span className="tag">Offline coach (rules-based, not AI)</span>;
   if (source === "safety") return <span className="tag" style={{ borderColor: "var(--bad)", color: "var(--bad)" }}>Safety</span>;
   if (source === "rules") return <span className="tag">Coaching rules</span>;
   if (source === "rider") return <span className="tag">Your edit</span>;

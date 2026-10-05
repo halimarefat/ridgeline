@@ -1,19 +1,25 @@
 // SVG charts: workout power profiles (zone-coloured blocks), stage-style
 // elevation profiles (grade-coloured), time series and histograms.
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { clock, distValue, distUnit, gradeBucket, zoneOf, type Units } from "./format";
 
-export function useWidth<T extends HTMLElement>(): [React.RefObject<T | null>, number] {
-  const ref = useRef<T>(null);
+export function useWidth<T extends HTMLElement>(): [(el: T | null) => void, number] {
+  // Callback ref: works even when the measured element mounts after the
+  // first render (e.g. a chart that first shows an empty state).
   const [w, setW] = useState(600);
-  useEffect(() => {
-    if (!ref.current) return;
-    const ro = new ResizeObserver((es) => {
+  const ro = useRef<ResizeObserver | null>(null);
+  const ref = useCallback((el: T | null) => {
+    ro.current?.disconnect();
+    ro.current = null;
+    if (!el) return;
+    setW(Math.max(120, Math.floor(el.getBoundingClientRect().width)));
+    const obs = new ResizeObserver((es) => {
       for (const e of es) setW(Math.max(120, Math.floor(e.contentRect.width)));
     });
-    ro.observe(ref.current);
-    return () => ro.disconnect();
+    obs.observe(el);
+    ro.current = obs;
   }, []);
+  useEffect(() => () => ro.current?.disconnect(), []);
   return [ref, w];
 }
 
@@ -45,11 +51,13 @@ export function WorkoutChart(props: { timeline: number[][]; height?: number; pos
         )}
       </svg>
       {!props.compact && (
+        <span className="chart-ftp-label" style={{ top: ftpLine - 16 }}>
+          FTP
+        </span>
+      )}
+      {!props.compact && (
         <div className="chart-axis">
           <span>0:00</span>
-          <span className="chart-ftp-label" style={{ top: ftpLine - 9 }}>
-            FTP
-          </span>
           <span>{clock(total)}</span>
         </div>
       )}
@@ -127,7 +135,7 @@ export function ElevationChart(props: { chart: (number | null)[][]; height?: num
 }
 
 /** Generic time series: rows [t, v1, v2, …]; series index → class & label. */
-export function SeriesChart(props: { rows: (number | null)[][]; series: { index: number; label: string; cls: string }[]; height?: number; markers?: number[] }) {
+export function SeriesChart(props: { rows: (number | null)[][]; series: { index: number; label: string; cls: string; scale?: string }[]; height?: number; markers?: number[] }) {
   const [ref, w] = useWidth<HTMLDivElement>();
   const h = props.height ?? 160;
   const rows = props.rows ?? [];
@@ -141,7 +149,11 @@ export function SeriesChart(props: { rows: (number | null)[][]; series: { index:
         {props.series.map((s) => {
           const vals = rows.map((r) => r[s.index]).filter((v): v is number => v != null);
           if (!vals.length) return null;
-          const hi = Math.max(...vals) * 1.08 || 1;
+          // Series sharing a scale key (e.g. power and target) share one axis.
+          const peers = props.series.filter((o) => (o.scale ?? o.index) === (s.scale ?? s.index));
+          let top = 0;
+          for (const o of peers) for (const r of rows) if (r[o.index] != null) top = Math.max(top, r[o.index] as number);
+          const hi = top * 1.08 || 1;
           const y = (v: number) => h - 4 - (v / hi) * (h - 10);
           // Break the line at missing values (gaps stay visible).
           const paths: string[] = [];

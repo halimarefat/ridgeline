@@ -502,8 +502,8 @@ function Cockpit({ s }: { s: J }) {
           rows={s.recent}
           height={140}
           series={[
-            { index: 1, label: "Power", cls: "s-power" },
-            { index: 4, label: "Target", cls: "s-target" },
+            { index: 1, label: "Power", cls: "s-power", scale: "w" },
+            { index: 4, label: "Target", cls: "s-target", scale: "w" },
             { index: 2, label: "Heart rate", cls: "s-hr" },
             { index: 3, label: "Cadence", cls: "s-cad" },
           ]}

@@ -181,7 +181,7 @@ function Shell() {
         </div>
       </nav>
       <main className="content" id="main">
-        <S />
+        <S key={`${screen.name}:${JSON.stringify(screen.params ?? {})}`} />
       </main>
       <DevBar />
       <Toasts />

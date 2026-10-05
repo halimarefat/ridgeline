@@ -161,7 +161,7 @@ function RouteDetail({ id, version, pickFor, onChanged }: { id: string; version:
           </Button>
         </p>
       )}
-      <div className="grid-2" style={{ gridTemplateColumns: "1fr 1fr" }}>
+      <div className="grid-2" style={{ gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)" }}>
         <MapView line={r.display.line} styleUrl={settings.data?.settings?.map?.style_url ?? ""} enabled={!!settings.data?.settings?.map?.enabled && !synthetic} synthetic={synthetic} height={260} />
         <div>
           <ElevationChart chart={r.display.chart} units={units} height={190} flags={s.flags} />
@@ -175,7 +175,7 @@ function RouteDetail({ id, version, pickFor, onChanged }: { id: string; version:
           </div>
         </div>
       </div>
-      <div className="grid-2" style={{ marginTop: 16, gridTemplateColumns: "1fr 1fr" }}>
+      <div className="grid-2" style={{ marginTop: 16, gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)" }}>
         <div>
           <h3>Grade distribution</h3>
           <Bars items={hist.map((h, i) => ({ label: h[0], value: h[1], cls: `bar-g${Math.min(6, Math.max(0, i - 1))}`, text: `${Math.round((100 * h[1]) / total)}%` }))} />
