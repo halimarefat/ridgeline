@@ -2,9 +2,12 @@ name: Release
 
 # Builds unsigned installers on GitHub's free standard runners and publishes
 # them as a GitHub Release when a version tag (v*) is pushed.
+# Also: a push to dev/main whose head commit message contains "[release vX.Y.Z…]"
+# (used when tags can't be pushed directly).
 on:
   push:
     tags: ["v*"]
+    branches: [dev, main]
   workflow_dispatch:
     inputs:
       tag:
@@ -15,7 +18,29 @@ permissions:
   contents: write
 
 jobs:
+  meta:
+    name: Release tag
+    if: github.event_name != 'push' || startsWith(github.ref, 'refs/tags/') || contains(github.event.head_commit.message, '[release v')
+    runs-on: ubuntu-24.04
+    outputs:
+      tag: ${{ steps.t.outputs.tag }}
+    steps:
+      - id: t
+        env:
+          INPUT_TAG: ${{ github.event.inputs.tag }}
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+          MSG: ${{ github.event.head_commit.message }}
+        run: |
+          if [ -n "$INPUT_TAG" ]; then TAG="$INPUT_TAG"
+          elif [ "$REF_TYPE" = "tag" ]; then TAG="$REF_NAME"
+          else TAG=$(printf '%s' "$MSG" | grep -o '\[release v[0-9A-Za-z.+-]*\]' | head -n 1 | sed 's/^\[release //; s/\]$//'); fi
+          echo "$TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.]+)?$' || { echo "::error::invalid release tag '$TAG'"; exit 1; }
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Release tag: $TAG"
+
   build:
+    needs: meta
     name: Build (${{ matrix.name }})
     strategy:
       fail-fast: false
@@ -73,7 +98,7 @@ jobs:
           if-no-files-found: error
 
   publish:
-    needs: build
+    needs: [meta, build]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -85,7 +110,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          TAG="${{ needs.meta.outputs.tag }}"
           cd dist && sha256sum $(ls | grep -v '^smoke-') > SHA256SUMS.txt && cat SHA256SUMS.txt && cd ..
           gh release create "$TAG" dist/* --target "${{ github.sha }}" --prerelease \
             --title "Ridgeline $TAG (unsigned preview)" --notes-file docs/release-notes.md
