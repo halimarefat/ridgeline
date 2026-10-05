@@ -45,8 +45,9 @@ case "$(uname -s)" in
     echo "Installing $DEB"
     sudo apt-get install -y xvfb > /dev/null || fail "could not install xvfb"
     sudo apt-get install -y "$(realpath "$DEB")" || fail "apt could not install $DEB"
-    BIN=$(dpkg-deb -c "$DEB" | awk '{print $6}' | grep -E '^\./usr/bin/[^/]+$' | first | sed 's|^\.||')
-    [ -n "$BIN" ] && [ -x "$BIN" ] || fail "installed binary not found (got '$BIN')"
+    PKG=$(dpkg-deb -f "$DEB" Package)
+    BIN=$(dpkg -L "$PKG" | grep -E '^/usr/bin/[^/]+$' | first)
+    [ -n "$BIN" ] && [ -x "$BIN" ] || fail "installed binary not found for package '$PKG' (files: $(dpkg -L "$PKG" | grep bin | tr '\n' ' '))"
     echo "Launching $BIN"
     export WEBKIT_DISABLE_COMPOSITING_MODE=1 WEBKIT_DISABLE_DMABUF_RENDERER=1 LIBGL_ALWAYS_SOFTWARE=1
     RIDGELINE_SMOKE_TEST="$REPORT" xvfb-run -a -s "-screen 0 1440x900x24" "$BIN" > "$LOG" 2>&1 &
@@ -56,13 +57,28 @@ case "$(uname -s)" in
     DMG=$(ls "$BUNDLE"/dmg/*.dmg 2>/dev/null | first)
     [ -n "$DMG" ] || fail "no .dmg in $BUNDLE/dmg"
     echo "Mounting $DMG"
+    hdiutil verify "$DMG" > /dev/null 2>&1 && echo "Disk image checksum verified" || echo "::warning::hdiutil verify did not succeed for $DMG"
     MNT=$(mktemp -d)
-    hdiutil attach -nobrowse -readonly -noautoopen -mountpoint "$MNT" "$DMG" > /dev/null || fail "hdiutil could not mount $DMG"
+    MOUNTED=""
+    for attempt in 1 2 3 4 5; do
+      if [ "$attempt" -le 2 ]; then
+        if OUT=$(hdiutil attach -nobrowse -readonly -noautoopen -noverify -mountpoint "$MNT" "$DMG" 2>&1); then MOUNTED=1; break; fi
+      else
+        # Fall back to the default /Volumes mount point.
+        if OUT=$(hdiutil attach -nobrowse -readonly -noautoopen -noverify "$DMG" 2>&1); then
+          MNT=$(printf '%s\n' "$OUT" | grep -o '/Volumes/.*' | tail -n 1)
+          [ -n "$MNT" ] && MOUNTED=1 && break
+        fi
+      fi
+      echo "hdiutil attach attempt $attempt failed: $OUT"
+      sleep 5
+    done
+    [ -n "$MOUNTED" ] || fail "hdiutil could not mount $DMG: $OUT"
     DEST=$(mktemp -d)
     APPSRC=$(ls -d "$MNT"/*.app 2>/dev/null | first)
     [ -n "$APPSRC" ] || fail "no .app inside the disk image"
     ditto "$APPSRC" "$DEST/$(basename "$APPSRC")" || fail "could not copy the app out of the disk image"
-    hdiutil detach "$MNT" > /dev/null 2>&1 || true
+    hdiutil detach "$MNT" > /dev/null 2>&1 || hdiutil detach -force "$MNT" > /dev/null 2>&1 || true
     APP="$DEST/$(basename "$APPSRC")"
     EXE=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$APP/Contents/Info.plist") || fail "no CFBundleExecutable"
     echo "Launching $APP ($EXE); architectures: $(lipo -archs "$APP/Contents/MacOS/$EXE" 2>&1)"
