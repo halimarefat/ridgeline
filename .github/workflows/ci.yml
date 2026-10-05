@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  core:
+    name: Core tests (Rust, std-only crates)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Rust toolchain
+        run: rustup toolchain install stable --profile minimal && rustup default stable
+      - name: Test core workspace
+        run: cargo test --workspace --locked 2>&1 | tee core-test.log
+      - name: Report failures as annotations
+        if: failure()
+        run: |
+          tail -c 20000 core-test.log | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}' | head -c 60000 > ann.txt
+          echo "::error title=core-tests::$(cat ann.txt)"
