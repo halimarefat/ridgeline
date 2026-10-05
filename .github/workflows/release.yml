@@ -1,0 +1,88 @@
+name: Release
+
+# Builds unsigned installers on GitHub's free standard runners and publishes
+# them as a GitHub Release when a version tag (v*) is pushed.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to create (e.g. v0.1.0-preview.1)"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build (${{ matrix.name }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: windows-x64
+            os: windows-latest
+            args: --bundles nsis,msi
+            bundle_dir: apps/desktop/src-tauri/target/release/bundle
+          - name: macos-universal
+            os: macos-latest
+            args: --target universal-apple-darwin --bundles app,dmg
+            bundle_dir: apps/desktop/src-tauri/target/universal-apple-darwin/release/bundle
+          - name: linux-x64
+            os: ubuntu-22.04
+            args: --bundles deb,appimage
+            bundle_dir: apps/desktop/src-tauri/target/release/bundle
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.name == 'macos-universal' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+      - name: Linux system libraries
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev patchelf libdbus-1-dev pkg-config libayatana-appindicator3-dev
+      - name: Install and build UI
+        working-directory: apps/desktop/ui
+        run: |
+          if [ -f package-lock.json ]; then npm ci; else npm install --no-audit --no-fund; fi
+          npm run build
+      - name: Build installers (unsigned)
+        working-directory: apps/desktop
+        run: ./ui/node_modules/.bin/tauri build ${{ matrix.args }}
+      - name: Collect
+        run: |
+          mkdir -p out
+          find "${{ matrix.bundle_dir }}" -type f \( -name '*.exe' -o -name '*.msi' -o -name '*.dmg' -o -name '*.deb' -o -name '*.AppImage' \) -exec cp {} out/ \;
+          ls -la out
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.name }}
+          path: out/*
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Checksums and release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          cd dist && sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt && cd ..
+          gh release create "$TAG" dist/* --target "${{ github.sha }}" --prerelease \
+            --title "Ridgeline $TAG (unsigned preview)" --notes-file docs/release-notes.md

@@ -1,0 +1,138 @@
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: never
+
+jobs:
+  core:
+    name: Core tests (Rust workspace, offline)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Test core crates
+        run: cargo test --workspace --release --locked 2>&1 | tee core-test.log
+      - name: FIT export decoded by the Garmin FIT SDK (independent decoder)
+        run: |
+          cargo run -q --release --locked -p rl-storage --example fit_fixture -- target/fit
+          git clone --depth 1 https://github.com/garmin/fit-javascript-sdk.git target/fitsdk
+          node scripts/verify-fit.mjs target/fitsdk/src target/fit/synthetic-ride.fit target/fit/synthetic-ride.expect.json | tee fit-verify.log
+      - name: Shipped assets contain no secrets
+        run: bash scripts/check-secrets.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: core-test-logs
+          path: |
+            core-test.log
+            fit-verify.log
+
+  ui:
+    name: UI typecheck, tests, build
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: apps/desktop/ui
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install
+        run: if [ -f package-lock.json ]; then npm ci; else npm install --no-audit --no-fund; fi
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ui-package-lock
+          path: apps/desktop/ui/package-lock.json
+          if-no-files-found: ignore
+
+  desktop:
+    name: Desktop build (${{ matrix.name }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: windows-x64
+            os: windows-latest
+            args: --bundles nsis,msi
+            bundle_dir: apps/desktop/src-tauri/target/release/bundle
+          - name: macos-universal
+            os: macos-latest
+            args: --target universal-apple-darwin --bundles app,dmg
+            bundle_dir: apps/desktop/src-tauri/target/universal-apple-darwin/release/bundle
+          - name: linux-x64
+            os: ubuntu-22.04
+            args: --bundles deb,appimage
+            bundle_dir: apps/desktop/src-tauri/target/release/bundle
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.name == 'macos-universal' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/desktop/src-tauri
+      - name: Linux system libraries
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev patchelf libdbus-1-dev pkg-config libayatana-appindicator3-dev
+      - name: Install UI dependencies
+        working-directory: apps/desktop/ui
+        run: if [ -f package-lock.json ]; then npm ci; else npm install --no-audit --no-fund; fi
+      - name: Build UI
+        working-directory: apps/desktop/ui
+        run: npm run build
+      - name: Desktop crate tests
+        working-directory: apps/desktop/src-tauri
+        run: cargo test --release 2>&1 | tee ../../../desktop-test.log
+      - name: Build installers (unsigned)
+        working-directory: apps/desktop
+        run: ./ui/node_modules/.bin/tauri build ${{ matrix.args }} 2>&1 | tee ../../tauri-build.log
+      - name: Checksums
+        run: |
+          cd "${{ matrix.bundle_dir }}"
+          find . -type f \( -name '*.exe' -o -name '*.msi' -o -name '*.dmg' -o -name '*.deb' -o -name '*.AppImage' \) -print0 | xargs -0 shasum -a 256 > SHA256SUMS-${{ matrix.name }}.txt
+          cat SHA256SUMS-${{ matrix.name }}.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ridgeline-${{ matrix.name }}
+          path: |
+            ${{ matrix.bundle_dir }}/**/*.exe
+            ${{ matrix.bundle_dir }}/**/*.msi
+            ${{ matrix.bundle_dir }}/**/*.dmg
+            ${{ matrix.bundle_dir }}/**/*.deb
+            ${{ matrix.bundle_dir }}/**/*.AppImage
+            ${{ matrix.bundle_dir }}/SHA256SUMS-*.txt
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: build-logs-${{ matrix.name }}
+          path: |
+            tauri-build.log
+            desktop-test.log
+            apps/desktop/src-tauri/Cargo.lock

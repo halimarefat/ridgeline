@@ -34,6 +34,12 @@ impl fmt::Display for JsonError {
 }
 impl std::error::Error for JsonError {}
 
+impl From<JsonError> for String {
+    fn from(e: JsonError) -> String {
+        e.0
+    }
+}
+
 pub type JResult<T> = Result<T, JsonError>;
 
 pub fn err<T>(msg: impl Into<String>) -> JResult<T> {

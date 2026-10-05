@@ -1,9 +1,9 @@
 //! Append-only activity journal (crash-safe recording).
 //!
-//! Samples, events and laps are appended as JSON lines. Buffered lines are
-//! written to the OS at least every second and fsync'd at least every two
-//! seconds, so a process crash loses at most ~1 s and a power loss at most
-//! ~2–3 s of samples. Lines that fail to write (e.g. disk full) stay queued
+//! Samples, events and laps are appended as JSON lines. Lines are handed to
+//! the OS on every session tick and fsync'd at least every two seconds, so a
+//! process crash loses at most the current second and a power loss / OS
+//! crash at most ~2–3 s of samples. Lines that fail to write (e.g. disk full) stay queued
 //! in memory and are retried; the session shows the error.
 
 use crate::fsx::io_msg;
@@ -14,7 +14,6 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
-pub const FLUSH_EVERY: Duration = Duration::from_millis(1000);
 pub const FSYNC_EVERY: Duration = Duration::from_millis(2000);
 const MAX_QUEUED_LINES: usize = 50_000;
 
@@ -135,11 +134,10 @@ impl RecordSink for ActivityJournal {
     }
     fn flush(&mut self, force: bool) -> Result<(), String> {
         let now = Instant::now();
-        let mut result = Ok(());
-        if force || now.duration_since(self.last_flush) >= FLUSH_EVERY {
-            self.last_flush = now;
-            result = self.write_all();
-        }
+        // Hand queued lines to the OS on every call (one small write per
+        // second of riding): a process crash then loses nothing written.
+        let mut result = self.write_all();
+        self.last_flush = now;
         if self.dirty_since_sync && (force || now.duration_since(self.last_sync) >= FSYNC_EVERY) {
             self.last_sync = now;
             self.dirty_since_sync = false;

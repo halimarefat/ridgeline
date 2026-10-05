@@ -6,7 +6,13 @@ version = 4
 name = "rl-app"
 version = "0.1.0"
 dependencies = [
+ "rl-coach",
+ "rl-device",
+ "rl-domain",
  "rl-json",
+ "rl-net",
+ "rl-session",
+ "rl-storage",
 ]
 
 [[package]]
@@ -31,6 +37,7 @@ version = "0.1.0"
 dependencies = [
  "rl-app",
  "rl-json",
+ "rl-net",
 ]
 
 [[package]]
