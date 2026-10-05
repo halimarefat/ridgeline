@@ -108,6 +108,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     };
   }, [toast]);
 
+  const bumpData = useCallback(() => setDataVersion((v) => v + 1), []);
+
   const go = useCallback((name: ScreenName, params?: Record<string, unknown>) => {
     setScreen({ name, params });
     window.scrollTo(0, 0);
@@ -126,9 +128,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       toast,
       dismissToast,
       dataVersion,
-      bumpData: () => setDataVersion((v) => v + 1),
+      bumpData,
     }),
-    [boot, bootError, live, screen, go, refreshBoot, toasts, toast, dismissToast, dataVersion],
+    [boot, bootError, live, screen, go, refreshBoot, toasts, toast, dismissToast, dataVersion, bumpData],
   );
   return <AppCtx.Provider value={value}>{children}</AppCtx.Provider>;
 }
@@ -142,6 +144,13 @@ export function useRpc<T = J>(method: string, params: Record<string, unknown> = 
   const key = JSON.stringify(params);
   useEffect(() => {
     let alive = true;
+    if (!method) {
+      // Disabled query (e.g. nothing selected yet).
+      setData(null);
+      setError(null);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     rpc<T>(method, JSON.parse(key))
       .then((d) => {

@@ -1,7 +1,10 @@
 import { createRoot } from "react-dom/client";
+import "./styles.css";
+import { AppProvider } from "./state";
+import { Root } from "./shell";
 
-function App() {
-  return <div className="boot">Ridgeline is starting…</div>;
-}
-
-createRoot(document.getElementById("root")!).render(<App />);
+createRoot(document.getElementById("root")!).render(
+  <AppProvider>
+    <Root />
+  </AppProvider>,
+);
