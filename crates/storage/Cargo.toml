@@ -1,0 +1,8 @@
+[package]
+name = "rl-storage"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[dependencies]
+rl-json = { path = "../json" }

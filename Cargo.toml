@@ -1,0 +1,19 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/json",
+    "crates/domain",
+    "crates/device",
+    "crates/session",
+    "crates/storage",
+    "crates/coach",
+    "crates/app",
+    "apps/devserver",
+]
+# These depend on third-party crates (tauri, btleplug, reqwest, keyring) and are
+# built in their own workspace (apps/desktop/src-tauri). See docs/adr/0002.
+exclude = ["crates/ble", "apps/desktop/src-tauri"]
+
+[profile.release]
+opt-level = 3
+debug = false
