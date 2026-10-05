@@ -68,6 +68,39 @@ jobs:
           path: apps/desktop/ui/package-lock.json
           if-no-files-found: ignore
 
+  e2e:
+    name: UI end-to-end (demo mode, developer server)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Build developer server and UI
+        run: |
+          cargo build --release --locked -p rl-devserver
+          cd apps/desktop/ui
+          if [ -f package-lock.json ]; then npm ci; else npm install --no-audit --no-fund; fi
+          npm run build
+      - name: Install Playwright (Chromium)
+        working-directory: apps/desktop/ui
+        run: |
+          npm install --no-save --no-audit --no-fund playwright@1.56.0
+          npx playwright install --with-deps chromium
+      - name: Run demo walkthrough
+        run: |
+          ./target/release/rl-devserver --port 1420 --data "$RUNNER_TEMP/e2e-data" --ui apps/desktop/ui/dist > devserver.log 2>&1 &
+          sleep 2
+          cd apps/desktop/ui && E2E_OUT=e2e-out node e2e/demo-flow.mjs http://localhost:1420
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e2e-screenshots
+          path: |
+            apps/desktop/ui/e2e-out
+            devserver.log
+
   desktop:
     name: Desktop build (${{ matrix.name }})
     strategy:
@@ -114,7 +147,9 @@ jobs:
         run: npm run build
       - name: Desktop crate tests
         working-directory: apps/desktop/src-tauri
-        run: cargo test --release 2>&1 | tee ../../../desktop-test.log
+        run: |
+          LOCK=""; [ -f Cargo.lock ] && LOCK="--locked"
+          cargo test --release $LOCK 2>&1 | tee ../../../desktop-test.log
       - name: Build installers (unsigned)
         working-directory: apps/desktop
         run: ./ui/node_modules/.bin/tauri build ${{ matrix.args }} 2>&1 | tee ../../tauri-build.log
@@ -124,7 +159,8 @@ jobs:
       - name: Checksums
         run: |
           cd "${{ matrix.bundle_dir }}"
-          find . -type f \( -name '*.exe' -o -name '*.msi' -o -name '*.dmg' -o -name '*.deb' -o -name '*.AppImage' \) -print0 | xargs -0 shasum -a 256 > SHA256SUMS-${{ matrix.name }}.txt
+          if command -v sha256sum >/dev/null 2>&1; then SUM="sha256sum"; else SUM="shasum -a 256"; fi
+          find . -type f \( -name '*.exe' -o -name '*.msi' -o -name '*.dmg' -o -name '*.deb' -o -name '*.AppImage' \) -print0 | xargs -0 $SUM > SHA256SUMS-${{ matrix.name }}.txt
           cat SHA256SUMS-${{ matrix.name }}.txt
       - uses: actions/upload-artifact@v4
         with:
@@ -137,6 +173,8 @@ jobs:
             ${{ matrix.bundle_dir }}/**/*.AppImage
             ${{ matrix.bundle_dir }}/SHA256SUMS-*.txt
           if-no-files-found: error
+      - name: Install the package and launch it (A01 smoke test)
+        run: bash scripts/smoke-installed.sh "${{ matrix.bundle_dir }}" "smoke-${{ matrix.name }}.json"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -144,4 +182,6 @@ jobs:
           path: |
             tauri-build.log
             desktop-test.log
+            smoke-${{ matrix.name }}.json
+            smoke-app.log
             apps/desktop/src-tauri/Cargo.lock

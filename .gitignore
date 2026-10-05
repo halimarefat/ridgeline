@@ -7,3 +7,4 @@ apps/desktop/ui/.cache/
 *.log
 .DS_Store
 Thumbs.db
+apps/desktop/ui/e2e-out/

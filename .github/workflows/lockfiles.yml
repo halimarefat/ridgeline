@@ -5,6 +5,12 @@ name: Update lockfiles
 # commits them back so later builds are pinned (cargo --locked / npm ci).
 on:
   workflow_dispatch:
+  push:
+    branches: [dev, main]
+    paths:
+      - apps/desktop/src-tauri/Cargo.toml
+      - apps/desktop/ui/package.json
+      - .github/workflows/lockfiles.yml
 
 permissions:
   contents: write
@@ -20,8 +26,9 @@ jobs:
           node-version: 22
       - name: Generate
         run: |
-          (cd apps/desktop/src-tauri && cargo generate-lockfile)
-          (cd apps/desktop/ui && rm -f package-lock.json && npm install --package-lock-only --no-audit --no-fund)
+          # Missing lockfile: generate. Existing: minimal update for manifest changes only.
+          (cd apps/desktop/src-tauri && if [ -f Cargo.lock ]; then cargo metadata --format-version 1 > /dev/null; else cargo generate-lockfile; fi)
+          (cd apps/desktop/ui && npm install --package-lock-only --no-audit --no-fund)
       - name: Commit
         run: |
           git config user.name "github-actions[bot]"
