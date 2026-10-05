@@ -9,8 +9,7 @@
 | Windows code signing | Requires a paid code-signing certificate (or a paid signing service) | Buy a certificate yourself and add it to the release workflow as a secret; Tauri's `bundle.windows.certificateThumbprint` / signing command supports it |
 | macOS signing, hardened runtime, notarization | Requires the paid Apple Developer Program | Join the program yourself, then add `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_PASSWORD` (app-specific) and `APPLE_TEAM_ID` as repository secrets; Tauri signs and notarizes during `tauri build` |
 | Coaching policy review | Limits chosen by the implementer from published sources | Have a qualified coach/clinician review [coaching-policy.md](coaching-policy.md) |
-| Live local-AI validation recorded | Adapter is tested with fixtures; no model run in CI | Install Ollama, run Test connection and a plan proposal; record the model and result |
-| Intel Mac and Windows 10/11 desktop launch | CI runs on Apple Silicon and Windows Server images | Install on an Intel Mac and a Windows 10/11 PC |
+| Intel Mac and Windows 10 desktop launch | CI runs on Apple Silicon and Windows Server images; Windows 11 desktop passed on the owner's PC | Install on an Intel Mac and a Windows 10 PC |
 
 Ridgeline did not and will not purchase anything. Paid integrations are off by default.
 
@@ -36,6 +35,8 @@ Ridgeline did not and will not purchase anything. Paid integrations are off by d
 - **Elevation** from the 90 m Copernicus DEM smooths short steep pitches and can show bridges/tunnels as dips/humps. Corrections are manual.
 - **Virtual speed** uses a fixed aerodynamic/rolling model (CdA 0.32, Crr 0.004). No drafting, no wind.
 - **Workout editor** supports power (%FTP or watts), RPE and cadence cues; no heart-rate-target workouts or free-text intervals with ramps inside repeats.
+- **AI plan summaries are not fact-checked.** The plan itself is validated, but the model's prose can misstate it (a live llama3.2 run claimed "one hard session per day" for a plan with 6 in 4 weeks). The weekly volume and hard-session counts the app shows before acceptance are computed locally and are authoritative.
+- **AI plans keep the offline draft's training days.** The model may swap workouts and shorten sessions but not move, add or drop days; ask the coach chat to move a session instead.
 - **No automatic updates** by design (updates must never apply during a ride). New versions come from the Releases page.
 - **Accessibility** has been checked for keyboard operation of the ride, labels and non-colour status. No screen-reader session has been recorded yet.
 - **Performance targets** (input < 100 ms, telemetry < 500 ms, map 30 fps) have not been measured on reference hardware. Control timing is verified in simulator tests only.
@@ -45,7 +46,7 @@ Ridgeline did not and will not purchase anything. Paid integrations are off by d
 
 1. Hardware validation with the owner's trainer on Windows and macOS; fix device quirks found.
 2. Code signing and notarization once the owner provides credentials.
-3. Record a live local-model run (Ollama) and tune prompts for small models.
+3. Live local-model runs with larger models and LM Studio (llama3.2 3B on Ollama is recorded in [live-ai-validation.md](live-ai-validation.md)); flag AI summary sentences that contradict the computed plan counts.
 4. Coach/clinician review of the coaching policy; bump the policy version.
 5. Screen-reader pass (NVDA, VoiceOver) and measured performance on reference hardware.
 6. Spin-down calibration flow and per-trainer quirk table.

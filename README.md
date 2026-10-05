@@ -9,7 +9,7 @@ Ridgeline is a free, open-source indoor cycling app for Windows and macOS (Linux
 | Bluetooth FTMS trainer (ERG, road simulation, resistance), heart rate, cycling power, speed/cadence | Implemented with golden-packet tests and a fault-injecting simulator; **unverified on real hardware** |
 | Onboarding, FTP history, 30 original workouts in 11 categories, workout editor | Implemented, tested |
 | Calendar plans: offline rules-based planner + coaching policy; proposals you accept/undo | Implemented, tested |
-| AI coach via a local model (Ollama, LM Studio or any OpenAI-compatible server on your computer) | Implemented; adapter tested with fixtures; **live model run not yet recorded** |
+| AI coach via a local model (Ollama, LM Studio or any OpenAI-compatible server on your computer) | Implemented; tested with fixtures and live with llama3.2 on Ollama ([report](docs/live-ai-validation.md)) |
 | GPX import, map route builder, elevation fetch and cleaning, free rides with gradient simulation | Implemented, tested with synthetic routes |
 | Recording, crash recovery, FIT/CSV/GPX export | Implemented; FIT verified with Garmin's FIT SDK decoder in CI |
 | Windows x64 / macOS universal / Linux x64 packages | Built by GitHub Actions; each is installed and launched in CI (A01 smoke test). Unsigned |
@@ -120,7 +120,7 @@ GitHub Actions (free standard runners, public repository) runs on every push: th
 - [Coaching policy, rationale and sources](docs/coaching-policy.md)
 - [Configuration reference](docs/configuration.md)
 - [Privacy](docs/privacy.md) · [Troubleshooting](docs/troubleshooting.md)
-- [Validation report](docs/validation-report.md) · [Hardware test checklist](docs/hardware-test-checklist.md)
+- [Validation report](docs/validation-report.md) · [Live local-AI validation](docs/live-ai-validation.md) · [Hardware test checklist](docs/hardware-test-checklist.md)
 - [Known limitations, costs and backlog](docs/limitations-and-backlog.md)
 - [Third-party notices](THIRD_PARTY_NOTICES.md)
 

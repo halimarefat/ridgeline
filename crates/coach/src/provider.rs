@@ -37,6 +37,9 @@ pub struct AiReply {
     pub prompt_tokens: Option<u64>,
     pub completion_tokens: Option<u64>,
     pub latency_ms: u64,
+    /// The server stopped at the token limit (`finish_reason: "length"`), so
+    /// the text is incomplete.
+    pub truncated: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -102,7 +105,7 @@ impl OpenAiCompatible {
         v.to_string_compact()
     }
 
-    pub fn parse_response(body: &str) -> Result<(String, String, Option<u64>, Option<u64>), AiError> {
+    pub fn parse_response(body: &str) -> Result<(String, String, Option<u64>, Option<u64>, bool), AiError> {
         let v = parse(body).map_err(|e| AiError::BadResponse(format!("not JSON ({e})")))?;
         if let Some(e) = v.get("error") {
             let m = e.get("message").and_then(|x| x.as_str()).or_else(|| e.as_str()).unwrap_or("unknown error");
@@ -120,7 +123,8 @@ impl OpenAiCompatible {
         let usage = v.get("usage");
         let pt = usage.and_then(|u| u.get("prompt_tokens")).and_then(|x| x.as_i64()).map(|x| x.max(0) as u64);
         let ct = usage.and_then(|u| u.get("completion_tokens")).and_then(|x| x.as_i64()).map(|x| x.max(0) as u64);
-        Ok((content.to_string(), model, pt, ct))
+        let truncated = v.get("choices").and_then(|c| c.as_arr()).and_then(|c| c.first()).and_then(|c| c.get("finish_reason")).and_then(|f| f.as_str()) == Some("length");
+        Ok((content.to_string(), model, pt, ct, truncated))
     }
 }
 
@@ -165,8 +169,8 @@ impl AiProvider for OpenAiCompatible {
                 .unwrap_or_default();
             return Err(AiError::Http(resp.status, msg));
         }
-        let (text, model, pt, ct) = Self::parse_response(&resp.text())?;
-        Ok(AiReply { text, model: if model.is_empty() { self.model.clone() } else { model }, prompt_tokens: pt, completion_tokens: ct, latency_ms: t0.elapsed().as_millis() as u64 })
+        let (text, model, pt, ct, truncated) = Self::parse_response(&resp.text())?;
+        Ok(AiReply { text, model: if model.is_empty() { self.model.clone() } else { model }, prompt_tokens: pt, completion_tokens: ct, latency_ms: t0.elapsed().as_millis() as u64, truncated })
     }
     fn list_models(&self, http: &dyn HttpClient) -> Result<Vec<String>, AiError> {
         let url = format!("{}/models", self.base_url.trim_end_matches('/'));

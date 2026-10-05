@@ -10,6 +10,7 @@ Version **0.1.0** (preview), branch `dev`. CI evidence: GitHub Actions workflow 
 |---|---|
 | Development sandbox (Linux x64, no Bluetooth, no registry access) | Rust workspace tests, UI build/typecheck/unit tests, Playwright walkthrough against the developer server (Chromium) |
 | GitHub-hosted `ubuntu-24.04` | Core tests, FIT verification with Garmin's FIT JavaScript SDK, secrets scan, UI checks, Playwright end-to-end walkthrough |
+| Owner's PC: Windows 11 Pro 10.0.26200, Intel Core Ultra 7 265K, 31 GB RAM, Bluetooth adapter, Ollama 0.35.1 | Installed release smoke test, Rust workspace tests, live local-AI run ([live-ai-validation.md](live-ai-validation.md)); hardware tests with a Tacx Flux 2 and Garmin HRM 200 pending |
 | GitHub-hosted `windows-latest` (x64) | Desktop crate tests, NSIS + MSI build, silent per-user install and launch smoke test |
 | GitHub-hosted `macos-latest` (Apple Silicon) | Desktop crate tests, universal (arm64 + x86_64) app + DMG build, DMG mount, copy and launch smoke test |
 | GitHub-hosted `ubuntu-22.04` (x64) | Desktop crate tests, deb + AppImage build, apt install and launch under Xvfb smoke test |
@@ -18,7 +19,7 @@ Version **0.1.0** (preview), branch `dev`. CI evidence: GitHub Actions workflow 
 
 | Check | Result |
 |---|---|
-| Rust workspace tests (`cargo test --workspace --release --locked`) | 127 passed, 0 failed |
+| Rust workspace tests (`cargo test --workspace --release --locked`) | 129 passed, 0 failed (CI on Linux; also on the owner's Windows 11 PC with the `x86_64-pc-windows-gnu` toolchain, where they exposed the plain HTTP client's Windows defects fixed on 2026-10-05) |
 | Golden packet fixtures (`fixtures/packets/golden.json`) | 5 test groups pass |
 | FIT export decoded by the Garmin FIT SDK (independent decoder) | Pass: record count, laps, timer/elapsed time, average power, missing HR as missing, `virtualActivity` sub-sport |
 | Secrets scan of tracked files and built UI | Pass |
@@ -37,8 +38,9 @@ Each package is installed the way a rider would install it, then launched with `
 | Windows x64 | Silent NSIS setup (`/S`, per user, under `%LOCALAPPDATA%`) → launch the installed exe | **Pass**: installed, UI loaded, demo opened with ≥ 3 simulated devices ready ([run 37316490332](https://github.com/halimarefat/ridgeline/actions/runs/37316490332)) |
 | macOS universal (run on arm64) | Mount DMG (accept license) → copy `.app` → launch | **Pass** ([run 37316490332](https://github.com/halimarefat/ridgeline/actions/runs/37316490332)) |
 | Linux x64 | `apt install ./Ridgeline_0.1.0_amd64.deb` → launch under Xvfb | **Pass** ([run 37316490332](https://github.com/halimarefat/ridgeline/actions/runs/37316490332)) |
+| **Windows 11 Pro 10.0.26200, real desktop PC** (owner's machine) | Released `Ridgeline_0.1.0_x64-setup.exe` from [v0.1.0-preview.1](https://github.com/halimarefat/ridgeline/releases/tag/v0.1.0-preview.1), SHA-256 checked against `SHA256SUMS.txt`, silent per-user install (`/S`, no admin) → launch with `RIDGELINE_SMOKE_TEST` | **Pass** (2026-10-05): UI loaded over IPC, demo opened with 3 simulated devices ready, and the **BLE adapter reported available** (CI runners have none) |
 
-Not covered: Intel Macs (the x86_64 slice is built but wasn't launched), Windows 10/11 desktop editions, real Bluetooth permission prompts, and upgrade/uninstall flows.
+Not covered: Intel Macs (the x86_64 slice is built but wasn't launched), Windows 10, real Bluetooth permission prompts, and upgrade/uninstall flows.
 
 ## Acceptance tests
 
@@ -54,7 +56,7 @@ Not covered: Intel Macs (the x86_64 slice is built but wasn't launched), Windows
 | A08 Mode ownership | **Pass** (simulator) | `session_sim::a08_mode_switch_leaves_one_controller_and_drops_stale_commands`, `controller::stale_generation_commands_are_dropped` |
 | A09 Disconnect under load | **Simulator pass; hardware open** | `session_sim::a09_disconnect_under_load_requires_controlled_resumption`, `controller::stop_without_ack_is_not_reported_as_success`; [checklist §4](hardware-test-checklist.md) |
 | A10 Network/AI outage | **Pass** (software): rides use no network; AI outage falls back to the offline plan | `coach::a10_ai_outage_falls_back_to_offline_plan`, `app_flow::routes_free_ride_offline_and_coach`; [checklist §5](hardware-test-checklist.md) for a real offline ride |
-| A11 AI validity | **Pass with fixtures** (mocked model responses); live local-model run not yet recorded | `a11_valid_ai_plan_is_accepted`, `a11_invalid_json_gets_one_repair_then_fallback`, `a11_injection_text_is_quoted_and_symptoms_short_circuit`, `planner::tight_schedule_and_no_ftp`, `property_random_profiles_always_validate` |
+| A11 AI validity | **Pass with fixtures and a live local model** (llama3.2 via Ollama on the owner's Windows 11 PC, 2026-10-05). The live run found and led to fixes for a plan that dropped 11 of 12 sessions and for token-limit truncation; the model obeyed an injected instruction and the validator rejected it. Details: [live-ai-validation.md](live-ai-validation.md) | `a11_dropped_or_added_days_are_rejected`, `a11_truncated_reply_is_reported_and_repair_does_not_echo_it`, `crates/coach/examples/live_local_model.rs`, plus `a11_valid_ai_plan_is_accepted`, `a11_invalid_json_gets_one_repair_then_fallback`, `a11_injection_text_is_quoted_and_symptoms_short_circuit`, `planner::tight_schedule_and_no_ftp`, `property_random_profiles_always_validate` |
 | A12 Plan adaptation | **Pass** (software + e2e): feedback creates an explained, versioned proposal; nothing changes until accepted; undo works | `adapt::*`, `app_flow::demo_onboarding_plan_ride_export_recovery`, e2e calendar edit → accept → undo |
 | A13 Recovery | **Pass** (software): an interrupted activity is detected and recovered with ≤ 2 s loss and no trainer restart; torn journal lines are skipped | `store::activity_crash_recovery`, `journal_survives_torn_line`, `app_flow::demo_onboarding_plan_ride_export_recovery`; force-quit on hardware in [checklist §6](hardware-test-checklist.md) |
 | A14 Export | **Pass**: FIT decoded by the Garmin FIT SDK agrees with internal duration, laps and records; CSV keeps units in headers and missing values empty | CI FIT step, `csv::missing_values_are_empty_and_units_in_header`, `fit::structure_and_crc` |
