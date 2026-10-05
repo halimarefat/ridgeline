@@ -6,3 +6,5 @@ license = "MIT"
 
 [dependencies]
 rl-json = { path = "../json" }
+rl-domain = { path = "../domain" }
+rl-session = { path = "../session" }

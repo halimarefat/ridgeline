@@ -6,6 +6,7 @@ members = [
     "crates/device",
     "crates/session",
     "crates/storage",
+    "crates/net",
     "crates/coach",
     "crates/app",
     "apps/devserver",

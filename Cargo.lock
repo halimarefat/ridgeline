@@ -13,7 +13,9 @@ dependencies = [
 name = "rl-coach"
 version = "0.1.0"
 dependencies = [
+ "rl-domain",
  "rl-json",
+ "rl-net",
 ]
 
 [[package]]
@@ -43,9 +45,19 @@ name = "rl-json"
 version = "0.1.0"
 
 [[package]]
+name = "rl-net"
+version = "0.1.0"
+dependencies = [
+ "rl-domain",
+ "rl-json",
+]
+
+[[package]]
 name = "rl-session"
 version = "0.1.0"
 dependencies = [
+ "rl-device",
+ "rl-domain",
  "rl-json",
 ]
 
@@ -53,5 +65,7 @@ dependencies = [
 name = "rl-storage"
 version = "0.1.0"
 dependencies = [
+ "rl-domain",
  "rl-json",
+ "rl-session",
 ]

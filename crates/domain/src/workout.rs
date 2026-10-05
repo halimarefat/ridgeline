@@ -371,24 +371,33 @@ impl Workout {
         self.blocks.iter().any(|b| b.steps.iter().any(|s| s.cadence.is_some()))
     }
     pub fn max_pct(&self, ftp: Option<f64>) -> f64 {
-        self.timeline()
+        self.blocks
             .iter()
+            .flat_map(|b| b.steps.iter())
             .map(|s| s.target.pct_at(1.0, ftp).unwrap_or(0.0).max(s.target.pct_at(0.0, ftp).unwrap_or(0.0)))
             .fold(0.0, f64::max)
     }
 
-    /// Seconds spent at or above `pct` %FTP (ramps sampled each second).
+    /// Seconds spent at or above `pct` %FTP (ramps handled analytically).
     pub fn seconds_at_or_above(&self, pct: f64) -> u32 {
-        let mut n = 0;
-        for s in self.timeline() {
-            for i in 0..s.dur_s {
-                let f = if s.dur_s > 1 { i as f64 / (s.dur_s - 1) as f64 } else { 0.0 };
-                if s.target.pct_at(f, None).unwrap_or(0.0) >= pct {
-                    n += 1;
-                }
+        let mut total = 0.0;
+        for b in &self.blocks {
+            let mut per_rep = 0.0;
+            for s in &b.steps {
+                let a = s.target.pct_at(0.0, None).unwrap_or(0.0);
+                let e = s.target.pct_at(1.0, None).unwrap_or(0.0);
+                let d = s.dur_s as f64;
+                per_rep += if a >= pct && e >= pct {
+                    d
+                } else if a < pct && e < pct {
+                    0.0
+                } else {
+                    d * (a.max(e) - pct) / (a - e).abs().max(1e-9)
+                };
             }
+            total += per_rep * b.count as f64;
         }
-        n
+        total.round() as u32
     }
 
     /// Content-based intensity class (same rule for built-in and custom workouts).

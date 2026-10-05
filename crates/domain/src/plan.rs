@@ -176,7 +176,8 @@ pub fn validate_plan<'a>(plan: &TrainingPlan, profile: &RiderProfile, today: Dat
         add("weeks".into(), format!("Plan length must be 1–{} weeks.", policy::MAX_PLAN_WEEKS));
         return issues;
     }
-    if today.days_until(&plan.start) < -7 || today.days_until(&plan.start) > 60 {
+    // The start window applies to new plans; adaptations of a running plan keep its start.
+    if plan.version == 1 && (today.days_until(&plan.start) < -7 || today.days_until(&plan.start) > 60) {
         add("start".into(), "Plan must start within the last week or the next 60 days.".into());
     }
     if plan.policy_version != policy::POLICY_VERSION {
