@@ -25,6 +25,9 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - name: Test core crates
         run: cargo test --workspace --release --locked 2>&1 | tee core-test.log
+      - name: Annotate errors
+        if: failure()
+        run: bash scripts/ci-annotate.sh core-test.log
       - name: FIT export decoded by the Garmin FIT SDK (independent decoder)
         run: |
           cargo run -q --release --locked -p rl-storage --example fit_fixture -- target/fit
@@ -53,9 +56,12 @@ jobs:
           node-version: 22
       - name: Install
         run: if [ -f package-lock.json ]; then npm ci; else npm install --no-audit --no-fund; fi
-      - run: npm run typecheck
-      - run: npm test
-      - run: npm run build
+      - run: npm run typecheck 2>&1 | tee ui.log
+      - run: npm test 2>&1 | tee -a ui.log
+      - run: npm run build 2>&1 | tee -a ui.log
+      - name: Annotate errors
+        if: failure()
+        run: grep -E "error TS|✖|not ok|Error" ui.log | head -40 | sed 's/^/::error::/'
       - uses: actions/upload-artifact@v4
         with:
           name: ui-package-lock
@@ -112,6 +118,9 @@ jobs:
       - name: Build installers (unsigned)
         working-directory: apps/desktop
         run: ./ui/node_modules/.bin/tauri build ${{ matrix.args }} 2>&1 | tee ../../tauri-build.log
+      - name: Annotate errors
+        if: failure()
+        run: bash scripts/ci-annotate.sh desktop-test.log tauri-build.log
       - name: Checksums
         run: |
           cd "${{ matrix.bundle_dir }}"
