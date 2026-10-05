@@ -79,10 +79,9 @@ fn main() {
     app.run(|handle, event| {
         if let RunEvent::Exit = event {
             let state = handle.state::<AppState>();
-            if let Ok(mut g) = state.rt.lock() {
-                if let Some(mut rt) = g.take() {
-                    rt.shutdown();
-                }
+            let rt = state.rt.lock().ok().and_then(|mut g| g.take());
+            if let Some(mut rt) = rt {
+                rt.shutdown();
             }
         }
     });

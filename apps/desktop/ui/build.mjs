@@ -21,6 +21,7 @@ const options = {
   legalComments: "linked",
   define: { "process.env.NODE_ENV": dev ? '"development"' : '"production"' },
   loader: { ".svg": "text" },
+  external: ["*.ttf", "*.woff2"],
   logLevel: "info",
 };
 
