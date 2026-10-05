@@ -8,6 +8,7 @@ import { Button, ErrorText, Field, Modal, NumberInput, Segmented, Spinner, Toggl
 import { dateLabel, mass, massToKg, massUnit, WEEKDAYS, type Units } from "../format";
 import { useAction, useJob } from "../hooks";
 import { CATEGORIES, GOALS, MINUTE_OPTIONS } from "./onboarding";
+import { speechAvailable } from "../ridecoach";
 
 type Tab = "profile" | "fitness" | "trainer" | "ai" | "map" | "privacy" | "about";
 const TABS: { value: Tab; label: string }[] = [
@@ -630,6 +631,42 @@ function SettingsForm({ tab }: { tab: "trainer" | "ai" | "map" }) {
               </details>
             </div>
           )}
+        </>
+      )}
+
+      {tab === "ai" && s.ride_coach && (
+        <>
+          <h2 style={{ marginTop: 24 }}>During rides</h2>
+          <p className="small muted">
+            The coach appears on the Ride screen. It never changes resistance: suggestions such as “Easier 5%” are buttons you press, the same as the ride controls.
+          </p>
+          <div className="stack">
+            <Toggle
+              checked={s.ride_coach.cues}
+              onChange={(v) => upd("ride_coach.cues", v)}
+              label="Ride cues"
+              hint="Previews of the next interval, cadence reminders, climbs ahead and an “ease off?” suggestion when you're well under target. Works offline."
+            />
+            <Toggle
+              checked={s.ride_coach.ai_moments}
+              onChange={(v) => upd("ride_coach.ai_moments", v)}
+              label="AI comments at key moments"
+              hint={
+                ai.provider === "offline"
+                  ? "Needs the local AI model (above). The quick prompts on the Ride screen use the offline coach until then."
+                  : "When a hard interval starts, at halfway, for the last interval and before long climbs."
+              }
+            />
+            <Field label="At most one AI comment every" hint="60–1800 seconds. Your own questions are always answered.">
+              <NumberInput value={s.ride_coach.moment_gap_s} min={60} max={1800} step={30} suffix="s" onChange={(v) => upd("ride_coach.moment_gap_s", v ?? 120)} />
+            </Field>
+            <Toggle
+              checked={s.ride_coach.voice}
+              onChange={(v) => upd("ride_coach.voice", v)}
+              label="Read the coach aloud"
+              hint={speechAvailable() ? "Uses your computer's built-in voice; nothing is sent anywhere. You can also switch this on the Ride screen." : "Text-to-speech isn't available in this window."}
+            />
+          </div>
         </>
       )}
 

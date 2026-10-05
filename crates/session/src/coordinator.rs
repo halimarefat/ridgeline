@@ -13,6 +13,7 @@
 //!   explicitly resume control, after which targets ramp in.
 
 use crate::record::{flags, summarize, Lap, RecordSink, Sample, SessionEvent, Summary};
+use crate::ride_coach::{CueInput, RideCoach};
 use crate::route_engine::{GradeLimits, Progression, RouteRun};
 use crate::workout_engine::WorkoutRun;
 use rl_device::controller::{ControlEventKind, ControlState};
@@ -263,6 +264,12 @@ pub struct Session {
     pub summary: Option<Summary>,
     last_freshness: [Freshness; 3],
     discard_after_stop: bool,
+    /// In-ride coach feed (rule cues and coach replies). Text only: it never
+    /// sends trainer commands.
+    pub coach: RideCoach,
+    /// Rule cues on/off (rider setting).
+    pub coach_cues: bool,
+    pub coach_imperial: bool,
 }
 
 fn sim_params(grade: f64, model: &BikeModel) -> ControlCommand {
@@ -327,7 +334,18 @@ impl Session {
             summary: None,
             last_freshness: [Freshness::NoSource; 3],
             discard_after_stop: false,
+            coach: RideCoach::default(),
+            coach_cues: true,
+            coach_imperial: false,
         }
+    }
+
+    /// Add a coach message to the ride feed and record it as a ride event.
+    pub fn coach_say(&mut self, now: u64, utc: i64, from: &'static str, kind: &str, text: &str, action: Option<crate::ride_coach::CueAction>, speak: bool) -> u64 {
+        let at = self.active_ms as f64 / 1000.0;
+        let id = self.coach.push(at, from, kind, text, action, speak).id;
+        self.event(now, utc, "coach", format!("{from}/{kind}: {text}"));
+        id
     }
 
     fn t_rel(&self, now: u64) -> u64 {
@@ -936,7 +954,131 @@ impl Session {
                 }
             }
             self.samples.push(s);
+            if self.coach_cues {
+                self.coach_tick(now, utc, controlled);
+            }
         }
+    }
+
+    /// Ride cues, once per recorded second. Read-only with respect to control.
+    fn coach_tick(&mut self, now: u64, utc: i64, controlled: bool) {
+        let step = self.workout.as_ref().and_then(|w| w.step_state());
+        let inp = CueInput {
+            active_s: self.active_ms as f64 / 1000.0,
+            workout: self.workout.as_ref(),
+            step: step.as_ref(),
+            route: self.route.as_ref(),
+            samples: &self.samples,
+            erg_active: self.owner == Owner::Workout && controlled && !self.needs_resume_control,
+            low_cadence_active: self.low_cad.active,
+            imperial: self.coach_imperial,
+        };
+        let added = self.coach.evaluate(&inp);
+        for it in added {
+            self.event(now, utc, "coach", format!("cue/{}: {}", it.kind, it.text));
+        }
+    }
+
+    /// Compact live summary for the in-ride coach (no location).
+    pub fn coach_snapshot(&self, now: u64, dm: &DeviceManager) -> Value {
+        let avg = |n: usize, f: &dyn Fn(&Sample) -> Option<f64>| -> Value {
+            let v: Vec<f64> = self.samples.iter().rev().take(n).filter_map(f).collect();
+            if v.len() * 2 < n.min(self.samples.len()).max(1) {
+                Value::Null
+            } else {
+                ((v.iter().sum::<f64>() / v.len() as f64).round()).into()
+            }
+        };
+        let fresh = |m: Metric| {
+            let r = dm.telemetry.reading(m, now);
+            if r.freshness == Freshness::Fresh {
+                r.value.map(|v| Value::from(v.round())).unwrap_or(Value::Null)
+            } else {
+                Value::Null
+            }
+        };
+        let workout = self.workout.as_ref().map(|w| {
+            let st = w.step_state();
+            let next = w.next_step();
+            Value::obj([
+                ("name", w.workout.name.clone().into()),
+                ("category", rl_json::ToJson::to_json(&w.workout.category)),
+                ("remaining_s", w.remaining_s().round().into()),
+                ("intensity_adjust_pct", w.adjust_pct.into()),
+                ("can_ease", (w.adjust_pct > crate::workout_engine::MIN_ADJUST_PCT).into()),
+                ("can_add", (w.adjust_pct + 5 <= crate::workout_engine::MAX_ADJUST_PCT).into()),
+                ("ftp_w", w.ftp_snapshot.map(|f| f.round()).into()),
+                (
+                    "step",
+                    st.map(|s| {
+                        Value::obj([
+                            ("label", s.label.into()),
+                            ("elapsed_s", s.elapsed_s.round().into()),
+                            ("remaining_s", s.remaining_s.round().into()),
+                            ("target_w", s.target_w.map(|x| x.round()).into()),
+                            ("target_pct_ftp", s.target_pct.map(|x| x.round()).into()),
+                            ("rpe", s.rpe.into()),
+                            ("cadence_cue", s.cadence.map(|c| Value::from(format!("{}-{}", c.0, c.1))).unwrap_or(Value::Null)),
+                        ])
+                    })
+                    .unwrap_or(Value::Null),
+                ),
+                ("next_step", next.map(|n| Value::obj([("label", n.label.clone().into()), ("duration_s", n.dur_s.into())])).unwrap_or(Value::Null)),
+            ])
+        });
+        let route = self.route.as_ref().map(|r| {
+            Value::obj([
+                ("name", r.route_name.clone().into()),
+                ("done_m", r.s.round().into()),
+                ("total_m", r.profile.total_m.round().into()),
+                ("road_grade_pct", r.road_grade.map(|g| (g * 10.0).round() / 10.0).into()),
+                ("climbed_m", r.ascent_m.round().into()),
+                ("trainer_follows_road", r.controls_resistance.into()),
+            ])
+        });
+        let last_cue = self.coach.feed.iter().rev().find(|f| f.from == "cue").map(|f| f.text.clone());
+        // The current interval only (small models mis-read averages that span
+        // a step change, and do arithmetic poorly: the ratio is precomputed).
+        let this_interval = self.workout.as_ref().and_then(|w| w.current_index()).map(|idx| {
+            let win: Vec<&Sample> = self.samples.iter().rev().take_while(|s| s.step == Some(idx as u32)).take(120).collect();
+            let m = |f: &dyn Fn(&Sample) -> Option<f64>| {
+                let v: Vec<f64> = win.iter().filter_map(|s| f(s)).collect();
+                (v.len() >= 5).then(|| v.iter().sum::<f64>() / v.len() as f64)
+            };
+            let (p, t) = (m(&|s| s.power), m(&|s| s.target_w));
+            Value::obj([
+                ("seconds_in", win.len().into()),
+                ("avg_power_w", p.map(|x| x.round()).into()),
+                ("avg_target_w", t.map(|x| x.round()).into()),
+                ("power_vs_target_pct", (match (p, t) {
+                    (Some(p), Some(t)) if t > 0.0 => Some((100.0 * p / t).round()),
+                    _ => None,
+                }).into()),
+                ("avg_cadence_rpm", m(&|s| s.cadence).map(|x| x.round()).into()),
+                ("avg_heart_rate_bpm", m(&|s| s.hr).map(|x| x.round()).into()),
+            ])
+        });
+        Value::obj([
+            ("mode", self.mode.to_json()),
+            ("state", self.state.to_json()),
+            ("ride_time_s", (self.active_ms / 1000).into()),
+            ("now", Value::obj([("power_w", fresh(Metric::Power)), ("cadence_rpm", fresh(Metric::Cadence)), ("heart_rate_bpm", fresh(Metric::HeartRate))])),
+            ("this_interval", this_interval.unwrap_or(Value::Null)),
+            (
+                "last_60s",
+                Value::obj([
+                    ("avg_power_w", avg(60, &|s| s.power)),
+                    ("avg_target_w", avg(60, &|s| s.target_w)),
+                    ("avg_cadence_rpm", avg(60, &|s| s.cadence)),
+                    ("avg_heart_rate_bpm", avg(60, &|s| s.hr)),
+                ]),
+            ),
+            ("last_5min", Value::obj([("avg_power_w", avg(300, &|s| s.power)), ("avg_heart_rate_bpm", avg(300, &|s| s.hr))])),
+            ("low_cadence_protection_active", self.low_cad.active.into()),
+            ("workout", workout.unwrap_or(Value::Null)),
+            ("route", route.unwrap_or(Value::Null)),
+            ("latest_cue", last_cue.into()),
+        ])
     }
 
     fn track_freshness(&mut self, now: u64, utc: i64, r: [&Reading; 3]) {
@@ -1092,6 +1234,7 @@ impl Session {
                 Value::Arr(self.notices.iter().map(|n| Value::obj([("id", n.id.into()), ("level", n.level.into()), ("text", n.text.clone().into())])).collect()),
             ),
             ("summary", self.summary.as_ref().map(|s| s.to_json()).unwrap_or(Value::Null)),
+            ("coach", self.coach.feed_json(12)),
             // Recent samples for live charts (last 10 minutes, downsampled to 2 s).
             (
                 "recent",

@@ -5,3 +5,4 @@ pub mod adapt;
 pub mod coach;
 pub mod planner;
 pub mod provider;
+pub mod ride;

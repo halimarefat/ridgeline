@@ -6,6 +6,9 @@ use rl_coach::adapt::{changes_json, feedback_changes, readiness_changes, Change,
 use rl_coach::coach::{chat, compact_summary, propose_plan, ActivityBrief, AiLimits};
 use rl_coach::planner::PlanContext;
 use rl_coach::provider::{AiProvider, ChatMessage, OpenAiCompatible};
+use rl_coach::ride::{ride_reply, RideReply, RideTrigger, Suggest};
+use rl_session::coordinator::SessionState;
+use rl_session::ride_coach::CueAction;
 use rl_domain::plan::{SessionStatus, TrainingPlan};
 use rl_domain::policy::{self, Readiness};
 use rl_domain::rider::RiderProfile;
@@ -58,8 +61,13 @@ impl App {
         }
     }
 
-    /// Consent and daily request limit. Counts one request.
+    /// Consent and daily request limit for a plan or chat request (which may
+    /// include one repair call, so it counts as two).
     pub(crate) fn ai_gate(&mut self, profile: &RiderProfile) -> Result<(), String> {
+        self.ai_gate_cost(profile, 2)
+    }
+
+    pub(crate) fn ai_gate_cost(&mut self, profile: &RiderProfile, cost: u32) -> Result<(), String> {
         if !profile.ai_consent.enabled {
             return Err("AI coaching is off. Turn on consent in Settings → AI coach to send your compact summary to the AI service.".into());
         }
@@ -70,8 +78,139 @@ impl App {
         if self.ai_counter.1 >= self.settings.ai.max_requests_per_day {
             return Err(format!("Daily AI request limit reached ({}). The offline coach is still available.", self.settings.ai.max_requests_per_day));
         }
-        self.ai_counter.1 += 2; // a request may include one repair call
+        self.ai_counter.1 += cost;
         Ok(())
+    }
+
+    // ------------------------------------------------------------ ride coach
+
+    fn ride_session_live(&self, id: &str) -> bool {
+        self.session.as_ref().map(|s| s.id == id && matches!(s.state, SessionState::Running | SessionState::Paused | SessionState::Starting)).unwrap_or(false)
+    }
+
+    /// Put a coach reply into the ride feed (if the ride is still going).
+    fn apply_ride_reply(&mut self, session_id: &str, kind: &str, r: Option<RideReply>) {
+        let Some(r) = r else { return };
+        if !self.ride_session_live(session_id) {
+            return;
+        }
+        let now = self.now();
+        let utc = now_utc_ms();
+        let Some(s) = self.session.as_mut() else { return };
+        let action = match r.suggest {
+            Suggest::Easier => Some(CueAction::Intensity(-5)),
+            Suggest::Harder => Some(CueAction::Intensity(5)),
+            Suggest::Stop => Some(CueAction::Stop),
+            Suggest::None => None,
+        };
+        s.coach_say(now, utc, r.source, kind, &r.text, action, true);
+        if let Some(n) = r.note {
+            s.coach_say(now, utc, "note", "ai_note", &n, None, false);
+        }
+    }
+
+    /// The rider asked the coach something during a ride (quick prompt or text).
+    pub(crate) fn ride_coach(&mut self, p: &Value) -> R {
+        let trigger = RideTrigger::parse(pstr(p, "trigger", 16)?, popt_str(p, "text", 300)?).ok_or("Unknown coach request.")?;
+        let now = self.now();
+        let utc = now_utc_ms();
+        let sid = match &self.session {
+            Some(s) if self.ride_session_live(&s.id) => s.id.clone(),
+            _ => return Err("No ride in progress.".into()),
+        };
+        if self.jobs.running("ride_coach").is_some() {
+            return Err("The coach is still answering.".into());
+        }
+        let symptom = matches!(&trigger, RideTrigger::Message(m) if policy::mentions_warning_symptom(m));
+        let (snap, recent) = {
+            let s = self.session.as_mut().expect("checked");
+            if let Some(w) = trigger.rider_words() {
+                s.coach_say(now, utc, "rider", trigger.kind(), &w, None, false);
+            }
+            let recent: Vec<(String, String)> = s.coach.feed.iter().rev().skip(1).take(4).rev().map(|f| (f.from.to_string(), f.text.clone())).collect();
+            (s.coach_snapshot(now, &self.dm), recent)
+        };
+        let profile = self.profile();
+        let rider = profile.as_ref().map(|p| Value::obj([("goal", p.goal.to_json()), ("experience", p.experience.to_json())])).unwrap_or(Value::Null);
+        let mut provider = if symptom { None } else { self.ai_provider().unwrap_or(None) };
+        let mut gate_note = None;
+        if provider.is_some() {
+            match profile.as_ref().map(|p| self.ai_gate_cost(p, 1)) {
+                Some(Ok(())) => {}
+                Some(Err(e)) => {
+                    gate_note = Some(e);
+                    provider = None;
+                }
+                None => provider = None,
+            }
+        }
+        let limits = self.ai_limits();
+        let kind = trigger.kind();
+        let Some(provider) = provider else {
+            // Offline coach or the safety path: answer immediately.
+            let mut r = ride_reply(&snap, &rider, &trigger, &recent, None, &limits, &AtomicBool::new(false));
+            if let (Some(r), Some(n)) = (r.as_mut(), gate_note) {
+                r.note = Some(n);
+            }
+            self.apply_ride_reply(&sid, kind, r);
+            return Ok(Value::obj([("job_id", Value::Null)]));
+        };
+        self.ride_ai_last_ms = Some(now);
+        let http = self.http.clone();
+        let job = self.spawn_job("ride_coach", move |ctx| {
+            ctx.progress(0, 1, "The coach is thinking…");
+            let r = ride_reply(&snap, &rider, &trigger, &recent, Some((&provider, http.as_ref())), &limits, &ctx.cancel);
+            ctx.with_app(|a| {
+                a.apply_ride_reply(&sid, kind, r);
+                Ok(Value::Null)
+            })
+            .unwrap_or_else(|| Err("App closed.".into()))
+        })?;
+        Ok(Value::obj([("job_id", job.into())]))
+    }
+
+    /// After each tick: let the AI coach comment on a key moment, if enabled,
+    /// spaced out, and never blocking the ride. Failures stay silent (the rule
+    /// cue for the moment is already in the feed).
+    pub(crate) fn ride_coach_moment(&mut self) {
+        let Some(s) = self.session.as_mut() else { return };
+        let Some(m) = s.coach.take_moment() else { return };
+        if s.state != SessionState::Running || !self.settings.ride_coach.ai_moments {
+            return;
+        }
+        let sid = s.id.clone();
+        let now = self.now();
+        let Ok(Some(provider)) = self.ai_provider() else { return };
+        if self.jobs.running("ride_coach").is_some() {
+            return;
+        }
+        if let Some(t) = self.ride_ai_last_ms {
+            if now.saturating_sub(t) < self.settings.ride_coach.moment_gap_s as u64 * 1000 {
+                return;
+            }
+        }
+        let Some(profile) = self.profile() else { return };
+        if self.ai_gate_cost(&profile, 1).is_err() {
+            return;
+        }
+        let Some(s) = self.session.as_ref() else { return };
+        let snap = s.coach_snapshot(now, &self.dm);
+        let recent: Vec<(String, String)> = s.coach.feed.iter().rev().take(4).rev().map(|f| (f.from.to_string(), f.text.clone())).collect();
+        let rider = Value::obj([("goal", profile.goal.to_json()), ("experience", profile.experience.to_json())]);
+        let limits = self.ai_limits();
+        let http = self.http.clone();
+        self.ride_ai_last_ms = Some(now);
+        let trigger = RideTrigger::Moment(m.text);
+        let _ = self.spawn_job("ride_coach", move |ctx| {
+            let r = ride_reply(&snap, &rider, &trigger, &recent, Some((&provider, http.as_ref())), &limits, &ctx.cancel);
+            // Only real AI comments: a fallback for a moment would repeat the cue.
+            let r = r.filter(|r| r.source == "ai");
+            ctx.with_app(|a| {
+                a.apply_ride_reply(&sid, "moment", r);
+                Ok(Value::Null)
+            })
+            .unwrap_or_else(|| Err("App closed.".into()))
+        });
     }
 
     fn recent_briefs(&self) -> Vec<ActivityBrief> {

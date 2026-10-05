@@ -68,6 +68,7 @@ impl App {
             ("activity_id", self.session_meta.as_ref().map(|m| m.id.clone()).into()),
             ("ride_active", self.ride_active().into()),
             ("jobs", self.jobs.to_json()),
+            ("ride_coach_busy", self.jobs.running("ride_coach").is_some().into()),
             ("notices", Value::Arr(self.notices.iter().map(|(id, l, t)| Value::obj([("id", (*id).into()), ("level", l.clone().into()), ("text", t.clone().into())])).collect())),
             ("demo", self.settings.demo_mode.into()),
             ("sim", sim),
@@ -175,6 +176,9 @@ impl App {
         };
         let journal = self.store.begin_activity(&meta)?;
         let mut s = Session::new(id.clone(), spec, utc, Some(Box::new(journal)));
+        s.coach_cues = self.settings.ride_coach.cues;
+        s.coach_imperial = self.settings.units == rl_domain::rider::Units::Imperial;
+        self.ride_ai_last_ms = None;
         if let Err(e) = s.start(now, utc, &mut self.dm) {
             let _ = self.store.delete_activity(&id);
             return Err(e);
@@ -196,7 +200,13 @@ impl App {
             "skip" => s.skip(now, utc),
             "adjust" => {
                 let d = p.req_i64("delta")?.clamp(-10, 10) as i32;
-                return Ok(s.adjust_intensity(d, now, utc).map(Value::from).unwrap_or(Value::Null));
+                let v = s.adjust_intensity(d, now, utc);
+                // A coach suggestion the rider accepted: confirm it in the feed.
+                if let (Some(v), Some("coach")) = (v, popt_str(p, "via", 16)?) {
+                    let what = if d < 0 { format!("easier {}%", -d) } else { format!("harder {d}%") };
+                    s.coach_say(now, utc, "note", "accepted", &format!("You chose {what}. Intensity is now {v:+}%."), None, false);
+                }
+                return Ok(v.map(Value::from).unwrap_or(Value::Null));
             }
             "manual_level" => s.set_manual_level(p.req_f64("level")?, now, utc),
             "lap" => s.manual_lap(now, utc),

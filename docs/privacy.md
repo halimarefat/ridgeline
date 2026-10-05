@@ -33,8 +33,9 @@ All data is stored as files in the app-data folder of your operating-system acco
 | You build a route | Routing service (default Valhalla, FOSSGIS) | The points you placed |
 | Elevation fetched for a route | Elevation service (default Open-Meteo) | Sampled route coordinates |
 | AI coach enabled **and** consent given | The AI endpoint you configured (default: a model on your own computer) | The compact summary described in [coaching-policy.md](coaching-policy.md#what-is-sent-to-an-ai-model) and your chat message |
+| AI coach enabled **and** consent given, during a ride, when you tap a coach prompt or at a key moment (if "AI comments at key moments" is on) | The same AI endpoint | A compact live ride snapshot (see [coaching-policy.md](coaching-policy.md#during-a-ride)) and your prompt or message. No location, route geometry or second-by-second data |
 
-Nothing is sent for rides, history, exports or diagnostics. Turn off any service in Settings; the app keeps working (routes draw without a background map, and the offline coach takes over). Bluetooth communication stays between your computer and your devices.
+Otherwise nothing is sent for rides, and nothing for history, exports or diagnostics. With the offline coach, the ride coach runs entirely on your computer. Turn off any service in Settings; the app keeps working (routes draw without a background map, and the offline coach takes over). Bluetooth communication stays between your computer and your devices.
 
 ## Your controls
 

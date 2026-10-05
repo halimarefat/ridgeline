@@ -9,6 +9,8 @@ import { MapView } from "../map";
 import { clock, dist, elev, minutes, pct, round, speed, type Units } from "../format";
 import { useAction, useDebounced } from "../hooks";
 import { IntensityTag, ProposalModal } from "../plan";
+import { askCoach, CoachPanel } from "../ridecoach";
+import { QUICK_PROMPTS } from "../coachfeed";
 
 type LaunchMode = "erg" | "erg_map" | "free_ride" | "manual" | "read_only";
 
@@ -228,7 +230,7 @@ function Gauge(props: { label: string; r: J; unit: string; sub?: React.ReactNode
 }
 
 function Cockpit({ s }: { s: J }) {
-  const { units, go } = useApp();
+  const { units, go, live, toast } = useApp();
   const { run, busy } = useAction();
   const [confirmStop, setConfirmStop] = useState(false);
   const [switchTo, setSwitchTo] = useState<string | null>(null);
@@ -258,9 +260,15 @@ function Cockpit({ s }: { s: J }) {
         cmd("adjustIntensity", { delta: -5 });
       } else if (e.key === "l" || e.key === "L") {
         cmd("lap");
+      } else if (e.key === "c" || e.key === "C") {
+        e.preventDefault();
+        document.getElementById("coach-input")?.focus();
+      } else if (!live?.ride_coach_busy && (running || paused)) {
+        const q = QUICK_PROMPTS.find((x) => x.key === e.key);
+        if (q) askCoach(q.trigger).catch((err) => toast(String(err.message), "warn"));
       }
     },
-    [running, paused, wk, s.needs_resume_control],
+    [running, paused, wk, s.needs_resume_control, live?.ride_coach_busy],
   );
 
   const modeLabel: Record<string, string> = { erg: rt ? "ERG workout · map" : "ERG workout", free_ride: "Road simulation", manual: "Manual resistance", read_only: "Read-only (no trainer control)" };
@@ -388,6 +396,8 @@ function Cockpit({ s }: { s: J }) {
         </div>
       </div>
 
+      {s.state !== "starting" && <CoachPanel s={s} onStop={() => setConfirmStop(true)} />}
+
       {wk && (
         <section className="panel">
           {step && (
@@ -508,7 +518,7 @@ function Cockpit({ s }: { s: J }) {
             { index: 3, label: "Cadence", cls: "s-cad" },
           ]}
         />
-        <p className="small muted">Shortcuts: Space pause/resume · S stop · N skip interval · + / − intensity · L lap. Shortcuts are off while typing.</p>
+        <p className="small muted">Shortcuts: Space pause/resume · S stop · N skip interval · + / − intensity · L lap · 1–4 ask the coach · C type to the coach. Shortcuts are off while typing.</p>
       </section>
 
       {confirmStop && <StopDialog onClose={() => setConfirmStop(false)} />}

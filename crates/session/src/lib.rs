@@ -3,5 +3,6 @@
 
 pub mod coordinator;
 pub mod record;
+pub mod ride_coach;
 pub mod route_engine;
 pub mod workout_engine;

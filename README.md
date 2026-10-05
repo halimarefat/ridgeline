@@ -65,6 +65,13 @@ The **offline coach** is always available: a deterministic planner and rule-base
 
 The model can only propose plans; every proposal is validated against the policy locally (with one repair attempt), and nothing changes until you accept it. If the model is slow, unavailable or returns invalid output, the offline plan is used and you're told why. Warning symptoms (for example chest pain or fainting) are detected before any model is asked and always produce the same safety message.
 
+**During rides** the coach sits on the Ride screen:
+- **Ride cues** preview the next interval, flag cadence drifting outside its cue, announce climbs ahead, and offer **Easier 5 %** when you've been well under target. They work offline.
+- **Quick prompts** are *How am I doing?*, *Too hard*, *Too easy* and *Motivate me* (keys **1–4**), plus a message box (**C**).
+- With a local model, the coach also comments when hard intervals start, at halfway and before long climbs.
+- Suggestions are buttons. Resistance changes only when you press one.
+- An optional voice reads the coach aloud. Settings for all of this are under **Settings → AI coach → During rides**.
+
 A **remote service** option exists for an OpenAI-compatible endpoint you configure yourself. It is off by default, needs an explicit opt-in, keeps its API key in the operating-system credential store, and is capped per day. Some remote services charge for use; Ridgeline never signs up, buys credits or enters payment details.
 
 ## Your data

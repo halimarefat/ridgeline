@@ -65,6 +65,18 @@ Not covered: Intel Macs (the x86_64 slice is built but wasn't launched), Windows
 | A17 Lifecycle | **Partial**: close during ride is intercepted (shell code); keep-awake implemented per OS; single-instance lock tested. Sleep/wake, minimize, Bluetooth off/on and low disk are not yet exercised on hardware | `app_flow::single_instance_lock`; [checklist §6](hardware-test-checklist.md) |
 | A18 Accessibility | **Partial**: the ride works fully by keyboard (verified in e2e: Space, S); status uses text and icons, not colour alone; contrast follows the design tokens. No screen-reader session recorded | e2e walkthrough |
 
+## In-ride coach
+
+| Check | Result | Evidence |
+|---|---|---|
+| Cues: interval preview/start, last hard interval, halfway, under-target "Easier 5 %" suggestion (rate-limited), recorded as ride events; suggestion never applied by itself | **Pass** (simulator) | `session_sim::ride_cues_preview_announce_and_suggest_without_touching_control` |
+| Climb ahead announced once with correct average grade, top of climb, cues can be turned off | **Pass** (simulator) | `session_sim::ride_cues_announce_climbs_and_can_be_turned_off` |
+| Suggestions filtered by ride state (no "harder" unless asked and on target, caps respected); offline replies use measured numbers; AI outage → offline coach, no retry; symptoms → safety copy without a model call; rider text untrusted; button prompts don't get earlier lines to parrot | **Pass** (fixtures) | `rl_coach::ride::tests::*` |
+| Offline prompts, accepted suggestion confirmed in the feed, safety path, no coach after the ride; AI reply via a background job while the ride keeps running, no location in the request | **Pass** (app + fake local model server) | `app_flow::ride_coach_offline_cues_prompts_and_accepted_suggestion`, `app_flow::ride_coach_ai_answers_off_the_control_path` |
+| Live: developer server + simulated trainer + **llama3.2 on Ollama** (owner's Windows 11 PC, CPU), Threshold 4×5 | **Pass**, 2026-10-05. A key-moment comment arrived about 5 s after a hard interval started; "How am I doing?" and "Too hard" were answered in 5–10 s; "Easier 5 %" lowered the target from 200 to 190 W only when pressed. The first live run showed the model repeating a stale earlier answer and omitting the easier option; fixed (interval-only numbers with a precomputed ratio, no earlier lines for button prompts, deterministic Easier/Harder offer) | Browser pane against `rl-devserver` |
+| Voice | Implemented with the Web Speech API; **not verified audibly** (no audio check in this environment) | `coachfeed.test.ts` covers the spoken text |
+| Real trainer during a coached ride | **Open** | Needs a ride on the owner's Tacx Flux 2 |
+
 ## Performance targets
 
 Not measured on reference hardware. By construction, the native tick runs at 20 Hz on a monotonic clock and recomputes the target every tick, so a scheduled transition is queued within one tick (≤ 50 ms); this is not yet measured separately. Trainer acknowledgement latency is logged per command (Devices → Trainer control) and will be reported with the hardware tests.

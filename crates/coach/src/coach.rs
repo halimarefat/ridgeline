@@ -101,7 +101,7 @@ pub fn chat_schema() -> Value {
     .expect("static schema")
 }
 
-fn clean(s: &str, max: usize) -> String {
+pub(crate) fn clean(s: &str, max: usize) -> String {
     s.chars().filter(|c| !c.is_control() || *c == '\n').take(max).collect::<String>().trim().to_string()
 }
 
@@ -118,7 +118,7 @@ fn clip_text(s: &str, max: usize) -> String {
 }
 
 /// Wrap untrusted free text so the model treats it as data.
-fn untrusted(s: &str) -> String {
+pub(crate) fn untrusted(s: &str) -> String {
     format!("<untrusted>{}</untrusted>", clean(s, 600).replace("<", "‹").replace(">", "›"))
 }
 

@@ -53,6 +53,8 @@ pub struct App {
     pub tz_offset_min: i32,
     pub tz_name: String,
     pub completions: Value,
+    /// Monotonic time of the last AI ride-coach request (spacing for key-moment comments).
+    pub ride_ai_last_ms: Option<u64>,
     /// Test hook: added to the monotonic clock (never set in production).
     clock_offset_ms: u64,
 }
@@ -88,6 +90,7 @@ impl App {
             tz_offset_min: 0,
             tz_name: "UTC".into(),
             completions,
+            ride_ai_last_ms: None,
             clock_offset_ms: 0,
         };
         app.apply_trainer_settings();
@@ -241,6 +244,7 @@ impl App {
             }
         }
         self.after_session_tick();
+        self.ride_coach_moment();
         let active = self.ride_active();
         if active != self.keep_awake_on {
             self.keep_awake_on = active;
@@ -423,6 +427,7 @@ impl App {
             "submitFeedback" => self.submit_feedback(&p),
             "adaptPlan" => self.adapt_plan(&p),
             "coachChat" => self.coach_chat(&p),
+            "rideCoach" => self.ride_coach(&p),
             "coachHistory" => self.coach_history(&p),
             "clearCoachHistory" => {
                 self.store.clear_chat()?;

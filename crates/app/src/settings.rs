@@ -79,6 +79,26 @@ json_struct!(TrainerSettings {
     ack_timeout_ms: "ack_timeout_ms" = 3000,
 });
 
+/// The coach during rides.
+#[derive(Debug, Clone, PartialEq)]
+pub struct RideCoachSettings {
+    /// Rule-based ride cues (interval previews, cadence, climbs). Offline.
+    pub cues: bool,
+    /// When the AI coach is on: comment at key moments (hard interval
+    /// starts, halfway, last interval, long climbs), at most every
+    /// `moment_gap_s` seconds.
+    pub ai_moments: bool,
+    pub moment_gap_s: u32,
+    /// Read cues and replies aloud with the operating system's voice.
+    pub voice: bool,
+}
+json_struct!(RideCoachSettings {
+    cues: "cues" = true,
+    ai_moments: "ai_moments" = true,
+    moment_gap_s: "moment_gap_s" = 120,
+    voice: "voice" = false,
+});
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Settings {
     pub schema: u32,
@@ -88,6 +108,7 @@ pub struct Settings {
     pub map: MapSettings,
     pub providers: ProviderSettings,
     pub trainer: TrainerSettings,
+    pub ride_coach: RideCoachSettings,
     pub diagnostics_opt_in: bool,
     pub theme: String,
 }
@@ -99,6 +120,7 @@ json_struct!(Settings {
     map: "map" = default_map(),
     providers: "providers" = default_providers(),
     trainer: "trainer" = default_trainer(),
+    ride_coach: "ride_coach" = default_ride_coach(),
     diagnostics_opt_in: "diagnostics_opt_in" = false,
     theme: "theme" = "dark".to_string(),
 });
@@ -116,6 +138,9 @@ fn default_providers() -> ProviderSettings {
     from_empty()
 }
 fn default_trainer() -> TrainerSettings {
+    from_empty()
+}
+fn default_ride_coach() -> RideCoachSettings {
     from_empty()
 }
 
@@ -164,6 +189,9 @@ impl Settings {
         {
             return Err("Trainer settings are out of range.".into());
         }
+        if !(60..=1800).contains(&self.ride_coach.moment_gap_s) {
+            return Err("Ride coach comment gap must be 60–1800 seconds.".into());
+        }
         if !matches!(self.theme.as_str(), "dark" | "light" | "system") {
             return Err("Unknown theme.".into());
         }
@@ -181,6 +209,13 @@ mod tests {
         assert!(s.validate().is_ok());
         assert_eq!(s.ai.provider, "offline", "no AI requests until the rider opts in");
         assert!(!s.ai.remote_enabled, "paid/remote integrations disabled by default");
+        assert!(s.ride_coach.cues && s.ride_coach.ai_moments && !s.ride_coach.voice);
+        // Settings saved before the ride coach existed still load, with defaults.
+        let mut old = s.to_json();
+        if let Value::Obj(pairs) = &mut old {
+            pairs.retain(|(k, _)| k != "ride_coach");
+        }
+        assert_eq!(Settings::from_json(&old).unwrap().ride_coach, s.ride_coach);
         let back = Settings::from_json(&s.to_json()).unwrap();
         assert_eq!(back, s);
         let mut bad = s.clone();

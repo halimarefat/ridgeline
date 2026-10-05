@@ -291,3 +291,73 @@ fn a16_long_session_has_no_drift_or_duplication() {
     }
     assert!(!r.dm.controller.has_pending());
 }
+
+#[test]
+fn ride_cues_preview_announce_and_suggest_without_touching_control() {
+    use rl_domain::library::builtin_workouts;
+    use rl_session::ride_coach::CueAction;
+    let mut r = Rig::new();
+    let mut sp = erg_spec();
+    sp.ftp_w = Some(400.0);
+    sp.workout = Some(builtin_workouts().into_iter().find(|w| w.id == "threshold-4x5").unwrap());
+    let mut s = Session::new("c1".into(), sp, 0, Some(Box::new(MemorySink::default())));
+    s.start(r.t, 0, &mut r.dm).unwrap();
+    // The simulated trainer can only hold 300 W: threshold at 400 W leaves the rider under target.
+    r.sim().set_fault("sim-trainer", "low_power_limit", true);
+    r.ride(&mut s, 800_000);
+    let kinds: Vec<&str> = s.coach.feed.iter().map(|f| f.kind.as_str()).collect();
+    let texts: Vec<&str> = s.coach.feed.iter().map(|f| f.text.as_str()).collect();
+    assert!(texts.iter().any(|t| t.starts_with("Warm-up: 12 min")), "{texts:?}");
+    assert!(texts.iter().any(|t| t.starts_with("In 15 s:") && t.contains("5 min at 400 W")), "{texts:?}");
+    assert!(texts.iter().any(|t| t.contains("5 min at 400 W") && t.contains("Hard and steady")), "{texts:?}");
+    let under = s.coach.feed.iter().find(|f| f.kind == "under_target").expect("under-target cue");
+    assert_eq!(under.action, Some(CueAction::Intensity(-5)));
+    assert!(kinds.iter().filter(|k| **k == "under_target").count() == 1, "rate limited: {kinds:?}");
+    assert_eq!(s.workout.as_ref().unwrap().adjust_pct, 0, "a suggestion is never applied by itself");
+    let m = s.coach.take_moment().expect("hard interval start is a moment");
+    assert_eq!(m.kind, "interval_start");
+    // Halfway and the last hard interval.
+    r.ride(&mut s, 1_800_000);
+    let texts: Vec<String> = s.coach.feed.iter().map(|f| f.text.clone()).collect();
+    assert!(texts.iter().any(|t| t.starts_with("Halfway")), "{texts:?}");
+    assert!(texts.iter().any(|t| t.starts_with("Last hard one!")), "{texts:?}");
+    // Cues are recorded with the ride.
+    assert!(s.events.iter().any(|e| e.kind == "coach" && e.detail.contains("under_target")));
+    let snap = s.coach_snapshot(r.t, &r.dm);
+    assert!(snap.get("workout").and_then(|w| w.get("step")).is_some());
+    assert!(snap.get("route").map(|v| v.is_null()).unwrap_or(true), "no location in the snapshot");
+}
+
+#[test]
+fn ride_cues_announce_climbs_and_can_be_turned_off() {
+    let pts = synthetic(LatLon { lat: 0.0, lon: 0.0 }, &[(600.0, 0.0), (1000.0, 5.0), (400.0, 0.0)], false);
+    let segs = vec![pts];
+    let src = ElevationSource { kind: "synthetic".into(), dataset: String::new(), resolution_m: 0.0, fetched_utc: 0, attribution: String::new() };
+    let prof = Arc::new(process(&RouteInput { segments: &segs, source: src, corrections: &[], flat_fallback: false }, &ProfileConfig::default()).unwrap());
+    for cues_on in [true, false] {
+        let mut r = Rig::new();
+        let mut sp = spec(RideMode::FreeRide);
+        sp.route = Some(("r".into(), "Climb".into(), prof.clone()));
+        let mut s = Session::new("c2".into(), sp, 0, None);
+        s.coach_cues = cues_on;
+        s.start(r.t, 0, &mut r.dm).unwrap();
+        for _ in 0..900 {
+            r.ride(&mut s, 1000);
+            if s.route.as_ref().unwrap().finished {
+                break;
+            }
+        }
+        let texts: Vec<&str> = s.coach.feed.iter().map(|f| f.text.as_str()).collect();
+        if !cues_on {
+            assert!(texts.is_empty(), "{texts:?}");
+            continue;
+        }
+        let climb = texts.iter().find(|t| t.starts_with("Climb in")).unwrap_or_else(|| panic!("{texts:?}"));
+        // e.g. "Climb in 600 m: 950 m at 5.0% average." (smoothing trims the edges slightly)
+        let avg: f64 = climb.split(" at ").nth(1).and_then(|x| x.split('%').next()).and_then(|x| x.parse().ok()).unwrap();
+        assert!((4.5..=5.5).contains(&avg), "{climb}");
+        assert_eq!(texts.iter().filter(|t| t.starts_with("Climb in")).count(), 1, "announced once: {texts:?}");
+        assert!(texts.iter().any(|t| t.starts_with("Top of the climb")), "{texts:?}");
+        assert_eq!(s.coach.take_moment().map(|m| m.kind), Some("climb_ahead".into()), "a 1 km climb is a moment");
+    }
+}

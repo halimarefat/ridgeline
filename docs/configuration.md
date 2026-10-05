@@ -43,6 +43,17 @@ Consent lives in the profile (`ai_consent.enabled`, `share_activity_summaries`, 
 
 Presets: Ollama `http://localhost:11434/v1`; LM Studio `http://localhost:1234/v1`; llama.cpp server and others usually `http://localhost:8080/v1`.
 
+## Ride coach (`ride_coach.*`)
+
+| Key | Default | Range / values | Meaning |
+|---|---|---|---|
+| `cues` | `true` | bool | Rule-based ride cues (interval previews, cadence, climbs, "ease off?"). Offline. Applies from the next ride |
+| `ai_moments` | `true` | bool | With the AI coach on: comment at key moments (hard interval start, halfway, last interval, long climb) |
+| `moment_gap_s` | 120 | 60–1800 | Minimum time between AI ride comments; the rider's own prompts are always answered |
+| `voice` | `false` | bool | Read cues and replies aloud with the operating system's voice (Web Speech API; offline) |
+
+Ride requests use at most 160 output tokens and a 60 s timeout regardless of `ai.max_tokens` / `ai.timeout_s`, and count one request each towards `max_requests_per_day`.
+
 ## Map and services
 
 | Key | Default | Meaning |

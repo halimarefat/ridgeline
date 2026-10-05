@@ -1,5 +1,11 @@
 # Ridgeline 0.1 preview — release notes
 
+## Unreleased (on `dev`)
+
+- **Coach on the Ride screen.** Ride cues preview the next interval, flag cadence drifting outside its cue, announce climbs ahead and the top, and offer **Easier 5 %** when you've been well under target. One-tap prompts (*How am I doing?*, *Too hard*, *Too easy*, *Motivate me*; keys **1–4**) and a message box (**C**) get answers from the offline coach or, with consent, your local AI model, which also comments at key moments. Suggestions are buttons: nothing changes until you press one. An optional voice reads the coach aloud. Settings → AI coach → *During rides*.
+- AI plans must keep every training day of the offline draft. Truncated model replies are detected, and the repair prompt fits small context windows (found in a live llama3.2 run).
+- The core's local HTTP client reaches Ollama/LM Studio on Windows (`localhost` → IPv4) and reports a service that isn't running as "not reachable".
+
 First public preview. **Unsigned builds** for evaluation, built and smoke-tested by GitHub Actions on Windows, macOS and Linux runners. No physical trainer has been tested yet. Please read the "Before you install" section.
 
 ## What's in it

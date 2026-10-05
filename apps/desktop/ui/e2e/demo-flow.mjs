@@ -103,6 +103,24 @@ await step("ride runs (keyboard pause/resume)", async () => {
   await page.keyboard.press("Space");
   await page.waitForTimeout(3000);
 });
+await step("ride coach: cue, quick prompt by key, suggestion button", async () => {
+  await see("Ride cue");
+  await page.keyboard.press("1");
+  await see("How am I doing?");
+  await see("ridden");
+  await page.getByRole("button", { name: "Too hard" }).click();
+  await see("Ease it 5%");
+  await page.getByRole("button", { name: "Easier 5%" }).last().click();
+  await see("You chose easier 5%");
+  await see("Applied ✓");
+  // Typing to the coach doesn't trigger ride shortcuts ("s" would open the stop dialog).
+  await page.keyboard.press("c");
+  await page.keyboard.type("hello coach, pass the snacks");
+  await page.keyboard.press("Enter");
+  await see("The offline coach can't chat");
+  if (await page.getByRole("dialog").count()) throw new Error("a shortcut fired while typing");
+  await page.keyboard.press("Escape");
+});
 await step("stop and save", async () => {
   await page.keyboard.press("s");
   await page.getByRole("button", { name: "Stop and save" }).click();
