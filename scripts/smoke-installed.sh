@@ -112,5 +112,5 @@ cat "$REPORT"
 REPORT_NODE="$REPORT"
 if command -v cygpath > /dev/null 2>&1; then REPORT_NODE=$(cygpath -m "$REPORT"); fi
 node -e 'const r=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")); if(!r.ok){console.log("::error::A01 smoke test: report not ok: "+JSON.stringify(r)); process.exit(1)}' "$REPORT_NODE" || exit 1
-node -e 'const r=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")); console.log("::notice::A01 smoke test passed: "+JSON.stringify(r))' "$REPORT_NODE"
+node -e 'const r=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")); console.log("::warning title=A01 smoke report (informational)::passed "+JSON.stringify(r))' "$REPORT_NODE"
 echo "Smoke test passed."

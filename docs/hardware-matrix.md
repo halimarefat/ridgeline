@@ -18,10 +18,10 @@ The spec's bar for claiming broad compatibility — two FTMS trainer models from
 
 | Platform | Package | Built in CI | Installed + launched + demo opened (CI smoke test) | Bluetooth on real hardware | Signed |
 |---|---|---|---|---|---|
-| Windows x64 (`windows-latest` runner) | NSIS setup (per-user), MSI | yes | see [validation report](validation-report.md) | unverified | no (gate) |
-| macOS universal (`macos-latest`, Apple Silicon runner) | DMG | yes | see validation report | unverified | no (gate: signing + notarization) |
+| Windows x64 (`windows-latest` runner) | NSIS setup (per-user), MSI | yes | **pass** (NSIS; [validation report](validation-report.md)) | unverified | no (gate) |
+| macOS universal (`macos-latest`, Apple Silicon runner) | DMG | yes | **pass** (arm64) | unverified | no (gate: signing + notarization) |
 | macOS Intel | same universal DMG | yes (x86_64 slice) | not run | unverified | no |
-| Linux x64 (`ubuntu-22.04`) | deb, AppImage | yes | see validation report | unverified | n/a |
+| Linux x64 (`ubuntu-22.04`) | deb, AppImage | yes | **pass** (deb) | unverified | n/a |
 
 ## How to add a result
 
