@@ -131,18 +131,28 @@ impl HttpClient for StdHttpClient {
         if url.scheme != "http" {
             return Err(HttpError::Unsupported("This build cannot make HTTPS requests from the core; use the desktop app.".into()));
         }
-        let addr = (url.host.as_str(), url.port)
-            .to_socket_addrs()
-            .map_err(|e| HttpError::Connect(e.to_string()))?
-            .next()
-            .ok_or_else(|| HttpError::Connect("no address".into()))?;
-        let mut s = TcpStream::connect_timeout(&addr, req.timeout.min(Duration::from_secs(10))).map_err(|e| {
-            if e.kind() == std::io::ErrorKind::TimedOut {
-                HttpError::Timeout
-            } else {
-                HttpError::Connect(e.to_string())
+        // Try every resolved address, IPv4 first: on Windows "localhost"
+        // resolves to ::1 first, while Ollama and LM Studio listen on
+        // 127.0.0.1 by default (and a refused ::1 costs ~2 s on Windows).
+        // Any failure to establish the connection is `Connect`, including a
+        // connect timeout: Windows retries a refused loopback connection for
+        // about two seconds and then reports TimedOut instead of
+        // ConnectionRefused. `Timeout` is reserved for a service that accepted
+        // the connection but did not answer in time.
+        let mut addrs: Vec<_> = (url.host.as_str(), url.port).to_socket_addrs().map_err(|e| HttpError::Connect(e.to_string()))?.collect();
+        addrs.sort_by_key(|a| a.is_ipv6());
+        let mut last_err = HttpError::Connect("no address".into());
+        let mut stream = None;
+        for addr in &addrs {
+            match TcpStream::connect_timeout(addr, req.timeout.min(Duration::from_secs(10))) {
+                Ok(s) => {
+                    stream = Some(s);
+                    break;
+                }
+                Err(e) => last_err = HttpError::Connect(e.to_string()),
             }
-        })?;
+        }
+        let mut s = stream.ok_or(last_err)?;
         s.set_read_timeout(Some(req.timeout)).ok();
         s.set_write_timeout(Some(req.timeout)).ok();
         let host_hdr = if url.port == 80 { url.host.clone() } else { format!("{}:{}", url.host, url.port) };
@@ -250,6 +260,28 @@ mod tests {
     use super::*;
     use std::net::TcpListener;
 
+    /// Read a whole request (head and Content-Length body) before replying:
+    /// on Windows, closing a socket with unread input sends a reset that can
+    /// discard the response before the client reads it.
+    fn read_request(c: &mut TcpStream) {
+        let mut data = Vec::new();
+        let mut buf = [0u8; 4096];
+        loop {
+            let n = c.read(&mut buf).unwrap_or(0);
+            data.extend_from_slice(&buf[..n]);
+            if let Some(end) = data.windows(4).position(|w| w == b"\r\n\r\n") {
+                let head = String::from_utf8_lossy(&data[..end]).to_ascii_lowercase();
+                let len: usize = head.lines().find_map(|l| l.strip_prefix("content-length:")).and_then(|v| v.trim().parse().ok()).unwrap_or(0);
+                if data.len() >= end + 4 + len {
+                    return;
+                }
+            }
+            if n == 0 {
+                return;
+            }
+        }
+    }
+
     #[test]
     fn url_parsing() {
         let u = parse_url("http://localhost:11434/v1/chat/completions").unwrap();
@@ -267,8 +299,7 @@ mod tests {
         let h = std::thread::spawn(move || {
             for (i, conn) in l.incoming().take(2).enumerate() {
                 let mut c = conn.unwrap();
-                let mut buf = [0u8; 4096];
-                let _ = c.read(&mut buf);
+                read_request(&mut c);
                 let resp = if i == 0 {
                     "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhello\r\n6\r\n world\r\n0\r\n\r\n".to_string()
                 } else {
@@ -282,6 +313,18 @@ mod tests {
         assert_eq!((r.status, r.text().as_str()), (200, "hello world"));
         let r = c.send(&HttpRequest::get(&format!("http://127.0.0.1:{port}/y"), Duration::from_secs(5))).unwrap();
         assert_eq!((r.status, r.text().as_str()), (404, "nop"));
+        h.join().unwrap();
+        // IPv4-only server (like Ollama's default) reached as "localhost",
+        // which Windows resolves to ::1 first.
+        let l = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = l.local_addr().unwrap().port();
+        let h = std::thread::spawn(move || {
+            let (mut c, _) = l.accept().unwrap();
+            read_request(&mut c);
+            c.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nv4").unwrap();
+        });
+        let r = c.send(&HttpRequest::get(&format!("http://localhost:{port}/"), Duration::from_secs(5))).unwrap();
+        assert_eq!(r.text(), "v4");
         h.join().unwrap();
         // Nothing listening: connect error, not a hang.
         let e = c.send(&HttpRequest::get("http://127.0.0.1:1/", Duration::from_secs(2))).unwrap_err();
