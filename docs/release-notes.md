@@ -16,7 +16,7 @@ First public preview. **Unsigned builds** for evaluation, built and smoke-tested
 ## Before you install
 
 - **Windows:** SmartScreen may warn because the installer isn't signed. Choose **More info → Run anyway** only for files from this release page whose SHA-256 matches `SHA256SUMS.txt`. The setup installs for your user only. WebView2 is downloaded if it's missing.
-- **macOS 11+ (universal):** the app isn't notarized. After the first launch attempt, open **System Settings → Privacy & Security → Open Anyway**, then allow Bluetooth.
+- **macOS 11+ (universal):** opening the disk image shows the MIT license; choose Agree. The app isn't notarized. After the first launch attempt, open **System Settings → Privacy & Security → Open Anyway**, then allow Bluetooth.
 - **Linux:** `sudo apt install ./Ridgeline_*_amd64.deb`, or run the AppImage. BlueZ is required.
 - `smoke-<platform>.json` files are the CI reports from installing and launching each package.
 

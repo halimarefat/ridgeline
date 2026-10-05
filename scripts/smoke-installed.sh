@@ -62,18 +62,19 @@ case "$(uname -s)" in
     MOUNTED=""
     for attempt in 1 2 3 4 5; do
       if [ "$attempt" -le 2 ]; then
-        if OUT=$(hdiutil attach -nobrowse -readonly -noautoopen -noverify -mountpoint "$MNT" "$DMG" 2>&1); then MOUNTED=1; break; fi
+        # The image carries the MIT license as an agreement; accept it non-interactively.
+        if OUT=$(printf 'Y\nY\n' | PAGER=cat hdiutil attach -nobrowse -readonly -noautoopen -noverify -mountpoint "$MNT" "$DMG" 2>&1); then MOUNTED=1; break; fi
       else
         # Fall back to the default /Volumes mount point.
-        if OUT=$(hdiutil attach -nobrowse -readonly -noautoopen -noverify "$DMG" 2>&1); then
+        if OUT=$(printf 'Y\nY\n' | PAGER=cat hdiutil attach -nobrowse -readonly -noautoopen -noverify "$DMG" 2>&1); then
           MNT=$(printf '%s\n' "$OUT" | grep -o '/Volumes/.*' | tail -n 1)
           [ -n "$MNT" ] && MOUNTED=1 && break
         fi
       fi
-      echo "hdiutil attach attempt $attempt failed: $OUT"
+      echo "hdiutil attach attempt $attempt failed: $(printf '%s' "$OUT" | tail -n 3 | tr '\n' ' ')"
       sleep 5
     done
-    [ -n "$MOUNTED" ] || fail "hdiutil could not mount $DMG: $OUT"
+    [ -n "$MOUNTED" ] || fail "hdiutil could not mount $DMG: $(printf '%s' "$OUT" | tail -n 3 | tr '\n' ' ')"
     DEST=$(mktemp -d)
     APPSRC=$(ls -d "$MNT"/*.app 2>/dev/null | first)
     [ -n "$APPSRC" ] || fail "no .app inside the disk image"

@@ -23,7 +23,7 @@ Ridgeline is a free, open-source indoor cycling app for Windows and macOS (Linux
 2. Check the file against `SHA256SUMS.txt` if you like.
 3. Install:
    - **Windows:** run the setup file. It installs for your user only (no administrator rights). Because the preview is not code-signed, Microsoft Defender SmartScreen may say it "protected your PC"; choose **More info → Run anyway** only if you downloaded it from this repository.
-   - **macOS:** open the `.dmg` and drag Ridgeline to Applications. Because the preview is not notarized, macOS blocks the first launch; open **System Settings → Privacy & Security** and choose **Open Anyway** for Ridgeline (this allows only this app; it does not turn off Gatekeeper). Allow Bluetooth when asked.
+   - **macOS:** open the `.dmg` (accept the MIT license shown) and drag Ridgeline to Applications. Because the preview is not notarized, macOS blocks the first launch; open **System Settings → Privacy & Security** and choose **Open Anyway** for Ridgeline (this allows only this app; it does not turn off Gatekeeper). Allow Bluetooth when asked.
    - **Linux:** `sudo apt install ./Ridgeline_<version>_amd64.deb`, or make the AppImage executable and run it. BlueZ must be running.
 4. Start Ridgeline and choose **Try a demo** to explore with a simulated trainer, power meter and heart-rate strap, or **Set up my bike** for the short onboarding interview.
 

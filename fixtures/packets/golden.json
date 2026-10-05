@@ -1,0 +1,51 @@
+{
+  "description": "Golden Bluetooth packets for Ridgeline's parsers and encoders (acceptance A03). Hex bytes are little-endian as transmitted. 'expect' lists decoded values after unit conversion; null means the field is absent (not zero). 'error': true means the packet must be rejected. Checked by crates/device/tests/packet_fixtures.rs.",
+  "indoor_bike_data": [
+    { "name": "speed, cadence, power", "hex": "44 00 B2 0C B4 00 C8 00", "expect": { "speed_kmh": 32.5, "cadence_rpm": 90, "power_w": 200, "heart_rate_bpm": null } },
+    { "name": "More Data bit set: no speed field", "hex": "41 00 2C 01", "expect": { "speed_kmh": null, "power_w": 300 } },
+    {
+      "name": "all optional fields, negative power and resistance, energy N/A sentinels",
+      "hex": "FE 1F C4 09 60 09 AA 00 A0 00 70 11 01 FB FF F6 FF B4 00 FF FF 58 02 FF 8E 41 10 0E 78 00",
+      "expect": {
+        "speed_kmh": 25, "avg_speed_kmh": 24, "cadence_rpm": 85, "avg_cadence_rpm": 80, "total_distance_m": 70000,
+        "resistance_level": -5, "power_w": -10, "avg_power_w": 180, "total_energy_kcal": null, "energy_per_hour_kcal": 600,
+        "energy_per_min_kcal": null, "heart_rate_bpm": 142, "met": 6.5, "elapsed_s": 3600, "remaining_s": 120
+      }
+    },
+    { "name": "empty", "hex": "", "error": true },
+    { "name": "flags only partly present", "hex": "44", "error": true },
+    { "name": "power field truncated", "hex": "44 00 B2 0C B4 00 C8", "error": true }
+  ],
+  "heart_rate": [
+    { "name": "8-bit value", "hex": "00 48", "expect": { "bpm": 72, "contact_detected": null, "energy_expended_kj": null, "rr_s": [] } },
+    { "name": "16-bit value", "hex": "01 2C 01", "expect": { "bpm": 300 } },
+    { "name": "contact, energy and two RR intervals", "hex": "1E 8C 10 00 00 04 00 02", "expect": { "bpm": 140, "contact_detected": true, "energy_expended_kj": 16, "rr_s": [1.0, 0.5] } },
+    { "name": "16-bit value truncated", "hex": "01 2C", "error": true }
+  ],
+  "cycling_power": [
+    { "name": "wheel and crank revolution data", "hex": "30 00 FA 00 10 27 00 00 00 08 64 00 00 04", "expect": { "power_w": 250, "wheel": [10000, 2048], "crank": [100, 1024], "pedal_balance_pct": null } },
+    { "name": "crank data truncated", "hex": "20 00 FA 00 64 00", "error": true }
+  ],
+  "csc": [
+    { "name": "wheel and crank", "hex": "03 01 00 00 00 00 04 05 00 00 08", "expect": { "wheel": [1, 1024], "crank": [5, 2048] } }
+  ],
+  "control_point_commands": [
+    { "command": "set_target_power", "watts": 250, "hex": "05 FA 00" },
+    { "command": "set_target_power", "watts": 1000, "hex": "05 E8 03" },
+    { "command": "set_simulation", "wind_mps": 0, "grade_pct": 5, "crr": 0.004, "cw": 0.51, "hex": "11 00 00 F4 01 28 33" },
+    { "command": "set_simulation", "wind_mps": -1.5, "grade_pct": -3, "crr": 0.005, "cw": 0, "hex": "11 24 FA D4 FE 32 00" },
+    { "command": "set_target_resistance", "level": 12.5, "hex": "04 7D 00" },
+    { "command": "request_control", "hex": "00" },
+    { "command": "start", "hex": "07" },
+    { "command": "stop", "hex": "08 01" },
+    { "command": "pause", "hex": "08 02" },
+    { "command": "set_simulation", "wind_mps": 0, "grade_pct": 400, "crr": 0.004, "cw": 0.51, "error": true }
+  ],
+  "control_point_responses": [
+    { "hex": "80 05 01", "expect": { "request_opcode": 5, "result": "success" } },
+    { "hex": "80 00 05", "expect": { "request_opcode": 0, "result": "control not permitted" } },
+    { "hex": "80 11 02", "expect": { "request_opcode": 17, "result": "not supported" } },
+    { "hex": "80 05", "error": true },
+    { "hex": "05 05 01", "error": true }
+  ]
+}
