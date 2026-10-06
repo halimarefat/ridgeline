@@ -109,8 +109,27 @@ jobs:
       - name: Checksums and release
         env:
           GH_TOKEN: ${{ github.token }}
+        # Errors are repeated as ::error:: annotations, which are public; step logs need a sign-in.
         run: |
+          set -o pipefail
           TAG="${{ needs.meta.outputs.tag }}"
+          fail() { sed 's/^/::error::/' "$1" | head -20; exit 1; }
+          ls -la dist
           cd dist && sha256sum $(ls | grep -v '^smoke-') > SHA256SUMS.txt && cat SHA256SUMS.txt && cd ..
-          gh release create "$TAG" dist/* --target "${{ github.sha }}" --prerelease \
-            --title "Ridgeline $TAG (unsigned preview)" --notes-file docs/release-notes.md
+          # The tag points at the built commit; it is created first so the release never depends on a branch head.
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" > /dev/null; then
+            echo "Tag $TAG already exists"
+          else
+            git tag "$TAG" "$GITHUB_SHA" && git push origin "refs/tags/$TAG" 2> tag.log || fail tag.log
+          fi
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            gh release upload "$TAG" dist/* --clobber 2> gh.log || fail gh.log
+          else
+            for attempt in 1 2; do
+              gh release create "$TAG" dist/* --verify-tag --prerelease \
+                --title "Ridgeline $TAG (unsigned preview)" --notes-file docs/release-notes.md 2> gh.log && break
+              cat gh.log; [ "$attempt" = 2 ] && fail gh.log; sleep 15
+              # A failed attempt can leave a partial release behind.
+              gh release delete "$TAG" --yes > /dev/null 2>&1 || true
+            done
+          fi
