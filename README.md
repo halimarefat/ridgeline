@@ -118,7 +118,15 @@ scripts/                 Task runner, CI helpers, FIT verifier, installed-app sm
 
 ### Tests and CI
 
-GitHub Actions (free standard runners, public repository) runs on every push: the Rust workspace tests, FIT verification with Garmin's FIT JavaScript SDK, a secrets scan, UI typecheck/unit tests/build, a Playwright end-to-end walkthrough of the demo, and desktop builds for Windows x64, macOS universal and Linux x64. Each built package is then **installed and launched** on its runner, which must report that the UI loaded, talked to the native service and opened demo mode with simulated devices ready. Pushing a `v*` tag publishes the installers, checksums and smoke-test reports as a GitHub pre-release.
+GitHub Actions (free standard runners, public repository) runs on every push except documentation-only changes. Each push runs:
+- the Rust workspace tests
+- FIT verification with Garmin's FIT JavaScript SDK
+- a secrets scan
+- the UI typecheck, unit tests and build
+- a Playwright end-to-end walkthrough of the demo
+- the Linux x64 desktop build
+
+The Windows x64 and macOS universal desktop builds run weekly, on demand (*Run workflow*), on pull requests and in every release. This keeps metered runner minutes low; macOS minutes count 10×. Each built package is then **installed and launched** on its runner, which must report that the UI loaded, talked to the native service and opened demo mode with simulated devices ready. Pushing a `v*` tag, or a `dev` commit whose message contains `[release vX.Y.Z…]`, builds all three platforms and publishes the installers, checksums and smoke-test reports as a GitHub pre-release.
 
 ## Documentation
 

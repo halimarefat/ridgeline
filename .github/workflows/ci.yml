@@ -1,9 +1,18 @@
 name: CI
 
+# Kept light to save runner minutes (metered even when free for public repos;
+# macOS counts 10x): documentation-only pushes skip CI, and pushes build the
+# desktop app on Linux only. Windows and macOS desktop builds run weekly, on
+# demand, on pull requests, and in every release (release.yml builds and
+# smoke-tests all three platforms).
 on:
   push:
     branches: [main, dev]
+    paths-ignore: ["docs/**", "**/*.md", "LICENSE"]
   pull_request:
+    paths-ignore: ["docs/**", "**/*.md", "LICENSE"]
+  schedule:
+    - cron: "17 6 * * 1"
   workflow_dispatch:
 
 permissions:
@@ -106,19 +115,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - name: windows-x64
-            os: windows-latest
-            args: --bundles nsis,msi
-            bundle_dir: apps/desktop/src-tauri/target/release/bundle
-          - name: macos-universal
-            os: macos-latest
-            args: --target universal-apple-darwin --bundles app,dmg
-            bundle_dir: apps/desktop/src-tauri/target/universal-apple-darwin/release/bundle
-          - name: linux-x64
-            os: ubuntu-22.04
-            args: --bundles deb,appimage
-            bundle_dir: apps/desktop/src-tauri/target/release/bundle
+        # Pushes: Linux only. Schedule, manual runs and pull requests: all three.
+        include: ${{ fromJSON(github.event_name == 'push' && '[{"name":"linux-x64","os":"ubuntu-22.04","args":"--bundles deb,appimage","bundle_dir":"apps/desktop/src-tauri/target/release/bundle"}]' || '[{"name":"windows-x64","os":"windows-latest","args":"--bundles nsis,msi","bundle_dir":"apps/desktop/src-tauri/target/release/bundle"},{"name":"macos-universal","os":"macos-latest","args":"--target universal-apple-darwin --bundles app,dmg","bundle_dir":"apps/desktop/src-tauri/target/universal-apple-darwin/release/bundle"},{"name":"linux-x64","os":"ubuntu-22.04","args":"--bundles deb,appimage","bundle_dir":"apps/desktop/src-tauri/target/release/bundle"}]') }}
     runs-on: ${{ matrix.os }}
     defaults:
       run:
