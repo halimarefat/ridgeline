@@ -260,6 +260,8 @@ function Cockpit({ s }: { s: J }) {
         cmd("adjustIntensity", { delta: -5 });
       } else if (e.key === "l" || e.key === "L") {
         cmd("lap");
+      } else if ((e.key === "r" || e.key === "R") && s.low_cadence_active && !s.low_cadence_ack) {
+        cmd("ackLowCadence");
       } else if (e.key === "c" || e.key === "C") {
         e.preventDefault();
         document.getElementById("coach-input")?.focus();
@@ -268,7 +270,7 @@ function Cockpit({ s }: { s: J }) {
         if (q) askCoach(q.trigger).catch((err) => toast(String(err.message), "warn"));
       }
     },
-    [running, paused, wk, s.needs_resume_control, live?.ride_coach_busy],
+    [running, paused, wk, s.needs_resume_control, live?.ride_coach_busy, s.low_cadence_active, s.low_cadence_ack],
   );
 
   const modeLabel: Record<string, string> = { erg: rt ? "ERG workout · map" : "ERG workout", free_ride: "Road simulation", manual: "Manual resistance", read_only: "Read-only (no trainer control)" };
@@ -333,10 +335,20 @@ function Cockpit({ s }: { s: J }) {
       )}
       {s.low_cadence_active && (
         <div className="banner banner-warn" role="alert">
-          <p>
-            <b>Low cadence:</b> the target has been eased so you can get going again. Spin up above 60 rpm and it ramps back in, or resume the target now.
-          </p>
-          {!s.low_cadence_ack && <Button onClick={() => cmd("ackLowCadence")}>Resume target</Button>}
+          {!s.low_cadence_ack ? (
+            <p>
+              <b>Low cadence: the load is eased to about 40 % of the target.</b> When you're ready, spin up past 60 rpm and press <b>Resume target</b> (R). The target ramps back in over 10 seconds.
+            </p>
+          ) : (
+            <p>
+              <b>Resuming:</b> keep spinning above 60 rpm for 3 seconds and the target ramps back in.
+            </p>
+          )}
+          {!s.low_cadence_ack && (
+            <Button kind="primary" big onClick={() => cmd("ackLowCadence")} kbd="R">
+              Resume target
+            </Button>
+          )}
         </div>
       )}
       {s.recording_error && (
@@ -518,7 +530,7 @@ function Cockpit({ s }: { s: J }) {
             { index: 3, label: "Cadence", cls: "s-cad" },
           ]}
         />
-        <p className="small muted">Shortcuts: Space pause/resume · S stop · N skip interval · + / − intensity · L lap · 1–4 ask the coach · C type to the coach. Shortcuts are off while typing.</p>
+        <p className="small muted">Shortcuts: Space pause/resume · S stop · N skip interval · + / − intensity · L lap · R resume target after low cadence · 1–4 ask the coach · C type to the coach. Shortcuts are off while typing.</p>
       </section>
 
       {confirmStop && <StopDialog onClose={() => setConfirmStop(false)} />}

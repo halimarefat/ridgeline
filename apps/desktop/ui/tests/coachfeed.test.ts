@@ -30,6 +30,9 @@ test("suggestions are pressable only while riding, once, and while recent", () =
   assert.equal(actionUsable(ease, 10, "running", true, new Set([10])), false, "applied once");
   assert.equal(actionUsable(ease, 15, "running", true, new Set()), false, "stale after newer lines");
   assert.equal(actionUsable(stop, 11, "paused", false, new Set()), true);
+  const resume = item(12, "cue", { action: { kind: "resume_target", label: "Resume target" } });
+  assert.equal(actionUsable(resume, 12, "running", true, new Set(), true), true);
+  assert.equal(actionUsable(resume, 12, "running", true, new Set(), false), false, "only while the eased load is waiting for the rider");
   assert.equal(sourceLabel("ai", "llama3.2"), "AI coach · llama3.2");
   assert.equal(sourceLabel("cue"), "Ride cue");
 });

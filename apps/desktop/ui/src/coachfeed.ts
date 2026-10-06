@@ -6,7 +6,7 @@ export interface FeedItem {
   from: "cue" | "ai" | "coach" | "rider" | "safety" | "note";
   kind: string;
   text: string;
-  action: { kind: "intensity"; delta: number; label: string } | { kind: "stop"; label: string } | null;
+  action: { kind: "intensity"; delta: number; label: string } | { kind: "stop"; label: string } | { kind: "resume_target"; label: string } | null;
   speak: boolean;
 }
 
@@ -63,10 +63,11 @@ export function speechText(text: string): string {
 }
 
 /** Whether a suggestion button can still be pressed. */
-export function actionUsable(item: FeedItem, latestId: number, state: string, hasWorkout: boolean, applied: Set<number>): boolean {
+export function actionUsable(item: FeedItem, latestId: number, state: string, hasWorkout: boolean, applied: Set<number>, lowCadenceWaiting = false): boolean {
   if (!item.action || applied.has(item.id)) return false;
   if (state !== "running" && state !== "paused") return false;
   if (item.action.kind === "intensity" && !hasWorkout) return false;
+  if (item.action.kind === "resume_target") return lowCadenceWaiting;
   // Old suggestions go stale: only the five most recent items stay actionable.
   return latestId - item.id < 5;
 }

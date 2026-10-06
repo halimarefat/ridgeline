@@ -209,6 +209,10 @@ struct LowCadence {
     above_since: Option<u64>,
     active: bool,
     rider_ack: bool,
+    /// Detection runs only once the rider has pedalled at recovery cadence
+    /// since the ride started or resumed: starting from standstill is not a
+    /// stall (a real ride started at 0 rpm was eased for its whole warm-up).
+    armed: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -450,6 +454,11 @@ impl Session {
         }
         self.state = SessionState::Running;
         self.last_tick = Some(now);
+        // The rider may restart from standstill: re-arm only once they pedal
+        // (an active low-cadence recovery stays in force).
+        if !self.low_cad.active {
+            self.low_cad = LowCadence::default();
+        }
         if self.owner != Owner::None {
             if dm.controller.state == ControlState::Controlled {
                 dm.controller.start(now);
@@ -552,6 +561,9 @@ impl Session {
         }
         dm.controller.new_generation();
         dm.controller.request_control(now)?;
+        if !self.low_cad.active {
+            self.low_cad = LowCadence::default();
+        }
         self.event(now, utc, "resume_control_requested", "");
         Ok(())
     }
@@ -1103,12 +1115,20 @@ impl Session {
             return if self.low_cad.active { low_w } else { target };
         };
         if !self.low_cad.active {
+            if !self.low_cad.armed {
+                if c >= RECOVER_CADENCE_RPM {
+                    self.low_cad.armed = true;
+                }
+                return target;
+            }
             if c < LOW_CADENCE_RPM && target > low_w + 1.0 {
                 let since = *self.low_cad.below_since.get_or_insert(now);
                 if now.saturating_sub(since) >= LOW_CADENCE_HOLD_MS {
-                    self.low_cad = LowCadence { active: true, ..Default::default() };
+                    self.low_cad = LowCadence { active: true, armed: true, ..Default::default() };
                     self.event(now, utc, "low_cadence", format!("{c:.0} rpm; load eased to {low_w:.0} W"));
-                    self.notify(now, "warn", "Low cadence detected — resistance eased. Spin up to 60+ rpm, then press Resume (R).");
+                    self.notify(now, "warn", "Low cadence: resistance eased. Spin up to 60+ rpm and press Resume target (R).");
+                    let at = self.active_ms as f64 / 1000.0;
+                    self.coach.push(at, "cue", "low_cadence", format!("Cadence dropped, so I eased the load to {low_w:.0} W. Spin up past 60 rpm, then press Resume target."), Some(crate::ride_coach::CueAction::ResumeTarget), true);
                     return low_w;
                 }
             } else {
@@ -1119,7 +1139,7 @@ impl Session {
             if c >= RECOVER_CADENCE_RPM {
                 let since = *self.low_cad.above_since.get_or_insert(now);
                 if self.low_cad.rider_ack && now.saturating_sub(since) >= RECOVER_HOLD_MS {
-                    self.low_cad = LowCadence::default();
+                    self.low_cad = LowCadence { armed: true, ..Default::default() };
                     self.ramp = Some((now, low_w));
                     self.event(now, utc, "low_cadence_recovered", "");
                     return low_w;

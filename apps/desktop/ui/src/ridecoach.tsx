@@ -81,7 +81,8 @@ export function CoachPanel({ s, onStop }: { s: J; onStop: () => void }) {
       return;
     }
     try {
-      await rpc("adjustIntensity", { delta: item.action.delta, via: "coach" });
+      if (item.action.kind === "resume_target") await rpc("ackLowCadence", {});
+      else await rpc("adjustIntensity", { delta: item.action.delta, via: "coach" });
       setApplied((a) => new Set(a).add(item.id));
     } catch (e) {
       toast(String((e as Error).message), "warn");
@@ -104,7 +105,7 @@ export function CoachPanel({ s, onStop }: { s: J; onStop: () => void }) {
         <span className="coach-action">
           {applied.has(f.id) ? (
             <span className="tag tag-sign">Applied ✓</span>
-          ) : actionUsable(f, latestId, s.state, hasWorkout, applied) ? (
+          ) : actionUsable(f, latestId, s.state, hasWorkout, applied, !!s.low_cadence_active && !s.low_cadence_ack) ? (
             <Button kind={f.action.kind === "stop" ? "danger" : "primary"} onClick={() => doAction(f)}>
               {f.action.label}
             </Button>

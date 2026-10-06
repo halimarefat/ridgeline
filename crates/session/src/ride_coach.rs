@@ -31,6 +31,9 @@ pub enum CueAction {
     Intensity(i32),
     /// Open the stop dialog (the rider still confirms there).
     Stop,
+    /// Confirm the rider is ready for the full target again after the
+    /// low-cadence easing (same as the banner button / R key).
+    ResumeTarget,
 }
 
 impl CueAction {
@@ -42,6 +45,7 @@ impl CueAction {
                 ("label", (if *d < 0 { format!("Easier {}%", -d) } else { format!("Harder {d}%") }).into()),
             ]),
             CueAction::Stop => Value::obj([("kind", "stop".into()), ("label", "Stop the ride".into())]),
+            CueAction::ResumeTarget => Value::obj([("kind", "resume_target".into()), ("label", "Resume target".into())]),
         }
     }
 }

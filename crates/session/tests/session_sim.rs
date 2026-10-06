@@ -361,3 +361,36 @@ fn ride_cues_announce_climbs_and_can_be_turned_off() {
         assert_eq!(s.coach.take_moment().map(|m| m.kind), Some("climb_ahead".into()), "a 1 km climb is a moment");
     }
 }
+
+#[test]
+fn starting_or_resuming_from_standstill_is_not_a_low_cadence_stall() {
+    // Regression (real ride, Tacx Flux 2, 2026-10-05): the ride was started
+    // before pedalling, the 0 rpm start triggered low-cadence easing, and the
+    // whole warm-up stayed at 40 % of target.
+    let mut r = Rig::new();
+    r.dm.connect("simulator:sim-cadence", r.t).unwrap();
+    r.sim().rider.cadence_rpm = 0.0;
+    r.idle(8000); // let the sensors' cadence settle at 0, as on the real trainer
+    let mut s = Session::new("lc".into(), erg_spec(), 0, None);
+    s.start(r.t, 0, &mut r.dm).unwrap();
+    r.ride(&mut s, 12_000);
+    assert!(!s.low_cadence_active(), "not pedalling yet is not a stall");
+    r.sim().rider.cadence_rpm = 88.0;
+    r.ride(&mut s, 15_000);
+    assert_eq!(r.mode(), TrainerMode::Erg(100), "full warm-up target once pedalling");
+    // Pause, stop pedalling, resume from standstill: still no stall.
+    s.pause(r.t, 0, &mut r.dm);
+    r.sim().rider.cadence_rpm = 0.0;
+    r.ride(&mut s, 5000);
+    s.resume(r.t, 0, &mut r.dm);
+    r.ride(&mut s, 8000);
+    assert!(!s.low_cadence_active());
+    // A real stall mid-effort still eases the load, with a coach cue to resume.
+    r.sim().rider.cadence_rpm = 88.0;
+    r.ride(&mut s, 12_000);
+    r.sim().rider.cadence_rpm = 25.0;
+    r.ride(&mut s, 7000);
+    assert!(s.low_cadence_active());
+    let cue = s.coach.feed.iter().find(|f| f.kind == "low_cadence").expect("low-cadence cue");
+    assert_eq!(cue.action, Some(rl_session::ride_coach::CueAction::ResumeTarget));
+}

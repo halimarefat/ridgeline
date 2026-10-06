@@ -39,7 +39,7 @@ Exactly one component — the `SessionCoordinator` — decides what the trainer 
 - Every command carries the session **generation**. Switching mode, pausing or stopping bumps the generation, so queued commands from the previous mode are discarded before they are sent (A08).
 - **Newest-target-wins:** only the latest pending target is kept; targets are rate-limited (default ≥ 1 s apart) and each waits for the trainer's response (3 s timeout). A timed-out start/stop is reported as *uncertain*, never as success.
 - **Ramp-in:** ERG targets ramp in over 10 s at start and after any resumption of control.
-- **Low-cadence protection:** in ERG, cadence under 40 rpm for 5 s drops the target to a low load; full targets return only after the rider acknowledges and cadence has been above 60 rpm for 3 s, and then ramp in (prevents the "ERG death spiral").
+- **Low-cadence protection:** in ERG, once the rider has pedalled at 60+ rpm (re-armed at every start, resume and resumption of control, so starting from standstill never counts), cadence under 40 rpm for 5 s drops the target to a low load and posts a coach cue; full targets return only after the rider acknowledges and cadence has been above 60 rpm for 3 s, and then ramp in (prevents the "ERG death spiral").
 - **Stop:** pending targets are dropped, a low-load target is sent, then FTMS *Stop*; the UI says whether the trainer confirmed it.
 - **Loss of control or connection:** the session pauses, telemetry is marked stale, the gap is recorded, and control is only renegotiated when the rider presses **Resume control** (A09). A reconnecting trainer never silently resumes a hard target.
 
