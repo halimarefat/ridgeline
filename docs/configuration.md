@@ -43,6 +43,12 @@ Consent lives in the profile (`ai_consent.enabled`, `share_activity_summaries`, 
 
 Presets: Ollama `http://localhost:11434/v1`; LM Studio `http://localhost:1234/v1`; llama.cpp server and others usually `http://localhost:8080/v1`.
 
+## Rides (`ride.*`) — can change during a ride
+
+| Key | Default | Range / values | Meaning |
+|---|---|---|---|
+| `auto_pause` | `true` | bool | Pause after 3 s without pedalling (cadence under 15 rpm and power under 25 W, from fresh readings only) and resume after 1.5 s of pedalling, with targets ramping in. Free rides keep running while the virtual bike coasts at 1 m/s or more. A ride started before pedalling waits. Manual pauses are never resumed automatically. |
+
 ## Ride coach (`ride_coach.*`)
 
 | Key | Default | Range / values | Meaning |

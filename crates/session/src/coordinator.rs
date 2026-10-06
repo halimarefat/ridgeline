@@ -73,6 +73,25 @@ pub const LOW_CADENCE_HOLD_MS: u64 = 5000;
 pub const RECOVER_CADENCE_RPM: f64 = 60.0;
 pub const RECOVER_HOLD_MS: u64 = 3000;
 pub const RAMP_IN_MS: u64 = 10_000;
+/// Auto-pause: not pedalling (cadence and power below these) for this long.
+pub const AUTO_PAUSE_MS: u64 = 3000;
+/// Auto-resume: pedalling again for this long.
+pub const AUTO_RESUME_MS: u64 = 1500;
+pub const PEDALLING_RPM: f64 = 15.0;
+pub const PEDALLING_W: f64 = 25.0;
+/// Free rides keep running while the rider coasts faster than this.
+pub const COASTING_MPS: f64 = 1.0;
+
+/// Is the rider pedalling? `None` when there's no fresh cadence or power to
+/// tell (never guessed: a disconnected sensor is handled as a dropout, not a stop).
+pub fn pedalling(cad: &Reading, power: &Reading) -> Option<bool> {
+    let c = if cad.freshness == Freshness::Fresh { cad.value } else { None };
+    let p = if power.freshness == Freshness::Fresh { power.value } else { None };
+    match (c, p) {
+        (None, None) => None,
+        _ => Some(c.map(|c| c >= PEDALLING_RPM).unwrap_or(false) || p.map(|p| p >= PEDALLING_W).unwrap_or(false)),
+    }
+}
 pub const START_TIMEOUT_MS: u64 = 8000;
 pub const STOP_WAIT_MS: u64 = 4500;
 
@@ -274,6 +293,16 @@ pub struct Session {
     /// Rule cues on/off (rider setting).
     pub coach_cues: bool,
     pub coach_imperial: bool,
+    /// Pause automatically when the rider stops pedalling and resume when
+    /// they start again (rider setting). Manual pauses are never auto-resumed.
+    pub auto_pause: bool,
+    pub auto_paused: bool,
+    idle_since: Option<u64>,
+    pedal_since: Option<u64>,
+    /// Workout power by workout position: (sum W, samples) per bucket, for the
+    /// "how am I following it" overlay on the workout profile.
+    trace: Vec<(f64, u32)>,
+    trace_bucket_s: f64,
 }
 
 fn sim_params(grade: f64, model: &BikeModel) -> ControlCommand {
@@ -341,7 +370,91 @@ impl Session {
             coach: RideCoach::default(),
             coach_cues: true,
             coach_imperial: false,
+            auto_pause: true,
+            auto_paused: false,
+            idle_since: None,
+            pedal_since: None,
+            trace: Vec::new(),
+            trace_bucket_s: 5.0,
         }
+    }
+
+    /// Auto-pause / auto-resume, evaluated every tick while running or
+    /// auto-paused. Free rides keep rolling while the rider coasts.
+    fn auto_pause_tick(&mut self, now: u64, utc: i64, dm: &mut DeviceManager) {
+        if !self.auto_pause {
+            self.idle_since = None;
+            self.pedal_since = None;
+            return;
+        }
+        let ped = pedalling(&dm.telemetry.reading(Metric::Cadence, now), &dm.telemetry.reading(Metric::Power, now));
+        match self.state {
+            SessionState::Running => {
+                self.pedal_since = None;
+                let coasting = self.mode == RideMode::FreeRide && self.route.as_ref().map(|r| r.v >= COASTING_MPS && !r.finished).unwrap_or(false);
+                if ped == Some(false) && !coasting {
+                    let since = *self.idle_since.get_or_insert(now);
+                    if now.saturating_sub(since) >= AUTO_PAUSE_MS {
+                        self.idle_since = None;
+                        self.pause(now, utc, dm);
+                        self.auto_paused = true;
+                        self.event(now, utc, "auto_pause", "not pedalling");
+                    }
+                } else {
+                    self.idle_since = None;
+                }
+            }
+            SessionState::Paused if self.auto_paused => {
+                self.idle_since = None;
+                if ped == Some(true) {
+                    let since = *self.pedal_since.get_or_insert(now);
+                    if now.saturating_sub(since) >= AUTO_RESUME_MS {
+                        self.pedal_since = None;
+                        self.auto_paused = false;
+                        self.event(now, utc, "auto_resume", "pedalling");
+                        // Same path as a manual resume: targets ramp in, and a
+                        // lost trainer still needs the rider's Resume control.
+                        self.resume(now, utc, dm);
+                        if self.ramp.is_some() {
+                            self.ramp = Some((now, 0.0));
+                        }
+                    }
+                } else {
+                    self.pedal_since = None;
+                }
+            }
+            _ => {
+                self.idle_since = None;
+                self.pedal_since = None;
+            }
+        }
+    }
+
+    /// Record power against the workout position for the profile overlay.
+    fn trace_power(&mut self, power: Option<f64>) {
+        let (Some(w), Some(p)) = (self.workout.as_ref(), power) else { return };
+        if self.trace.is_empty() {
+            self.trace_bucket_s = (w.total_s / 360.0).ceil().max(5.0);
+        }
+        let i = (w.pos_s / self.trace_bucket_s) as usize;
+        if self.trace.len() <= i {
+            self.trace.resize(i + 1, (0.0, 0));
+        }
+        self.trace[i].0 += p;
+        self.trace[i].1 += 1;
+    }
+
+    /// [[workout position s, average W], …] for buckets with data.
+    pub fn power_trace_json(&self) -> Value {
+        let b = self.trace_bucket_s;
+        Value::Arr(
+            self.trace
+                .iter()
+                .enumerate()
+                .filter(|(_, (_, n))| *n > 0)
+                .map(|(i, (sum, n))| Value::Arr(vec![((i as f64 + 0.5) * b).into(), (sum / *n as f64).round().into()]))
+                .collect(),
+        )
     }
 
     /// Add a coach message to the ride feed and record it as a ride event.
@@ -452,6 +565,7 @@ impl Session {
         if self.state != SessionState::Paused {
             return;
         }
+        self.auto_paused = false;
         self.state = SessionState::Running;
         self.last_tick = Some(now);
         // The rider may restart from standstill: re-arm only once they pedal
@@ -700,7 +814,11 @@ impl Session {
                     _ => {}
                 }
             }
-            SessionState::Running => self.run_tick(now, utc, dt_ms, dm),
+            SessionState::Running => {
+                self.run_tick(now, utc, dt_ms, dm);
+                self.auto_pause_tick(now, utc, dm);
+            }
+            SessionState::Paused => self.auto_pause_tick(now, utc, dm),
             SessionState::Stopping => {
                 if let Some(c) = dm.controller.stop_confirmed {
                     self.stop_confirmed = Some(c);
@@ -965,7 +1083,9 @@ impl Session {
                     self.recording_error = Some(e);
                 }
             }
+            let p = s.power;
             self.samples.push(s);
+            self.trace_power(p);
             if self.coach_cues {
                 self.coach_tick(now, utc, controlled);
             }
@@ -1194,6 +1314,7 @@ impl Session {
                     .unwrap_or(Value::Null),
                 ),
                 ("next", next.map(|n| n.to_json()).unwrap_or(Value::Null)),
+                ("power_trace", self.power_trace_json()),
                 ("timeline", Value::Arr(w.timeline.iter().map(|s| Value::Arr(vec![s.start_s.into(), s.dur_s.into(), s.target.pct_at(0.0, w.ftp_snapshot).into(), s.target.pct_at(1.0, w.ftp_snapshot).into()])).collect())),
             ])
         });
@@ -1246,6 +1367,8 @@ impl Session {
             ("low_cadence_ack", self.low_cad.rider_ack.into()),
             ("manual_level", self.manual_level.into()),
             ("stop_confirmed", self.stop_confirmed.into()),
+            ("auto_paused", self.auto_paused.into()),
+            ("auto_pause", self.auto_pause.into()),
             ("recording_error", self.recording_error.clone().into()),
             ("samples", self.samples.len().into()),
             ("laps", self.laps.len().into()),

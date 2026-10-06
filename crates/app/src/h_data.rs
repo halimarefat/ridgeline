@@ -26,6 +26,9 @@ impl App {
             return Err("Trainer settings can't change during a ride.".into());
         }
         let demo_changed = s.demo_mode != self.settings.demo_mode;
+        if let Some(sess) = self.session.as_mut() {
+            sess.auto_pause = s.ride.auto_pause;
+        }
         self.settings = s;
         self.store.write_value("settings.json", &self.settings.to_json())?;
         self.apply_trainer_settings();

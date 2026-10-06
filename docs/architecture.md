@@ -36,6 +36,7 @@ Exactly one component — the `SessionCoordinator` — decides what the trainer 
 
 - Ride modes: `erg` (workout targets), `free_ride` (route simulation), `manual` (resistance level), `read_only` (no control). ERG with a route (`erg` + `route_id`) moves along the map while the workout keeps control; the terrain never changes resistance in that mode.
 - Session states: `prepared → starting → running ⇄ paused → stopping → finished` (or `discarded`).
+- **Auto-pause** (setting `ride.auto_pause`, on by default): with fresh cadence/power showing no pedalling for 3 s, a running ride enters the normal pause path (low load, timer and workout frozen) marked *auto*; 1.5 s of pedalling resumes it through the normal resume path, with targets ramping in from zero. Free rides keep running while the virtual bike coasts. With no fresh cadence or power it does nothing (a dropout is not a stop). Manual pauses are never auto-resumed, and a lost trainer still needs **Resume control**.
 - Every command carries the session **generation**. Switching mode, pausing or stopping bumps the generation, so queued commands from the previous mode are discarded before they are sent (A08).
 - **Newest-target-wins:** only the latest pending target is kept; targets are rate-limited (default ≥ 1 s apart) and each waits for the trainer's response (3 s timeout). A timed-out start/stop is reported as *uncertain*, never as success.
 - **Ramp-in:** ERG targets ramp in over 10 s at start and after any resumption of control.

@@ -451,6 +451,17 @@ function SettingsForm({ tab }: { tab: "trainer" | "ai" | "map" }) {
           <div style={{ marginTop: 12 }}>
             <Toggle checked={s.demo_mode} onChange={(v) => upd("demo_mode", v)} label="Demo mode" hint="Adds a simulated trainer, power meter and heart-rate strap. Demo rides are labelled and never change your plan or FTP." />
           </div>
+          {s.ride && (
+            <>
+              <h2 style={{ marginTop: 20 }}>Rides</h2>
+              <Toggle
+                checked={s.ride.auto_pause}
+                onChange={(v) => upd("ride.auto_pause", v)}
+                label="Auto-pause when I stop pedalling"
+                hint="The timer and workout pause after 3 s without pedalling and resume when you pedal again; the target ramps back in. On free rides, coasting doesn't count as stopping. Can be changed during a ride."
+              />
+            </>
+          )}
           <h2 style={{ marginTop: 20 }}>Trainer behaviour on routes</h2>
           {riding && <p className="warn-text small">Trainer settings are locked during a ride.</p>}
           <div className="cols">

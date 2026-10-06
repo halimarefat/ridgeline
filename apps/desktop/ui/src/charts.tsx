@@ -1,6 +1,7 @@
 // SVG charts: workout power profiles (zone-coloured blocks), stage-style
 // elevation profiles (grade-coloured), time series and histograms.
 import { useCallback, useEffect, useRef, useState } from "react";
+import { traceRuns } from "./chartdata";
 import { clock, distValue, distUnit, gradeBucket, zoneOf, type Units } from "./format";
 
 export function useWidth<T extends HTMLElement>(): [(el: T | null) => void, number] {
@@ -24,12 +25,14 @@ export function useWidth<T extends HTMLElement>(): [(el: T | null) => void, numb
 }
 
 /** timeline: [start_s, dur_s, pct_start, pct_end] */
-export function WorkoutChart(props: { timeline: number[][]; height?: number; pos?: number | null; ftp?: number | null; compact?: boolean; label?: string }) {
+export function WorkoutChart(props: { timeline: number[][]; height?: number; pos?: number | null; ftp?: number | null; compact?: boolean; label?: string; trace?: number[][] }) {
   const [ref, w] = useWidth<HTMLDivElement>();
   const h = props.height ?? 140;
   const tl = props.timeline ?? [];
   const total = tl.length ? tl[tl.length - 1][0] + tl[tl.length - 1][1] : 1;
-  const maxPct = Math.max(120, ...tl.map((s) => Math.max(s[2] || 0, s[3] || 0))) * 1.05;
+  // The rider's power as % FTP (same scale as the profile), when FTP is known.
+  const tracePct = props.ftp && props.trace?.length ? props.trace.map(([p, wts]) => [p, (wts / props.ftp!) * 100]) : [];
+  const maxPct = Math.max(120, ...tl.map((s) => Math.max(s[2] || 0, s[3] || 0)), ...tracePct.map((t) => t[1])) * 1.05;
   const x = (t: number) => (t / total) * w;
   const y = (p: number) => h - (p / maxPct) * (h - 4);
   const ftpLine = y(100);
@@ -49,7 +52,21 @@ export function WorkoutChart(props: { timeline: number[][]; height?: number; pos
             <line x1={x(props.pos)} x2={x(props.pos)} y1={0} y2={h} className="chart-cursor" />
           </>
         )}
+        {traceRuns(tracePct).map((run, i) => {
+          const pts = run.map(([p, v]) => `${x(p).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+          return (
+            <g key={`t${i}`}>
+              <polyline points={pts} className="chart-power-halo" />
+              <polyline points={pts} className="chart-power" />
+            </g>
+          );
+        })}
       </svg>
+      {tracePct.length > 0 && !props.compact && (
+        <span className="chart-trace-legend">
+          <span className="chart-trace-swatch" /> Your power
+        </span>
+      )}
       {!props.compact && (
         <span className="chart-ftp-label" style={{ top: ftpLine - 16 }}>
           FTP

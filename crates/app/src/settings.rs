@@ -79,6 +79,16 @@ json_struct!(TrainerSettings {
     ack_timeout_ms: "ack_timeout_ms" = 3000,
 });
 
+/// Ride behaviour that isn't trainer control (so it may change mid-ride).
+#[derive(Debug, Clone, PartialEq)]
+pub struct RideSettings {
+    /// Pause when you stop pedalling, resume when you start again.
+    pub auto_pause: bool,
+}
+json_struct!(RideSettings {
+    auto_pause: "auto_pause" = true,
+});
+
 /// The coach during rides.
 #[derive(Debug, Clone, PartialEq)]
 pub struct RideCoachSettings {
@@ -108,6 +118,7 @@ pub struct Settings {
     pub map: MapSettings,
     pub providers: ProviderSettings,
     pub trainer: TrainerSettings,
+    pub ride: RideSettings,
     pub ride_coach: RideCoachSettings,
     pub diagnostics_opt_in: bool,
     pub theme: String,
@@ -120,6 +131,7 @@ json_struct!(Settings {
     map: "map" = default_map(),
     providers: "providers" = default_providers(),
     trainer: "trainer" = default_trainer(),
+    ride: "ride" = default_ride(),
     ride_coach: "ride_coach" = default_ride_coach(),
     diagnostics_opt_in: "diagnostics_opt_in" = false,
     theme: "theme" = "dark".to_string(),
@@ -138,6 +150,9 @@ fn default_providers() -> ProviderSettings {
     from_empty()
 }
 fn default_trainer() -> TrainerSettings {
+    from_empty()
+}
+fn default_ride() -> RideSettings {
     from_empty()
 }
 fn default_ride_coach() -> RideCoachSettings {
@@ -209,7 +224,7 @@ mod tests {
         assert!(s.validate().is_ok());
         assert_eq!(s.ai.provider, "offline", "no AI requests until the rider opts in");
         assert!(!s.ai.remote_enabled, "paid/remote integrations disabled by default");
-        assert!(s.ride_coach.cues && s.ride_coach.ai_moments && !s.ride_coach.voice);
+        assert!(s.ride_coach.cues && s.ride_coach.ai_moments && !s.ride_coach.voice && s.ride.auto_pause);
         // Settings saved before the ride coach existed still load, with defaults.
         let mut old = s.to_json();
         if let Value::Obj(pairs) = &mut old {

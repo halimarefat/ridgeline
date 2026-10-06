@@ -177,6 +177,7 @@ impl App {
         let journal = self.store.begin_activity(&meta)?;
         let mut s = Session::new(id.clone(), spec, utc, Some(Box::new(journal)));
         s.coach_cues = self.settings.ride_coach.cues;
+        s.auto_pause = self.settings.ride.auto_pause;
         s.coach_imperial = self.settings.units == rl_domain::rider::Units::Imperial;
         self.ride_ai_last_ms = None;
         if let Err(e) = s.start(now, utc, &mut self.dm) {

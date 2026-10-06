@@ -2,6 +2,7 @@
 // suggestion button may still be pressed.
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { traceRuns } from "../src/chartdata.ts";
 import { actionUsable, itemsToSpeak, sourceLabel, speechText, type FeedItem } from "../src/coachfeed.ts";
 
 const item = (id: number, from: FeedItem["from"], extra: Partial<FeedItem> = {}): FeedItem => ({ id, at_s: id * 10, from, kind: "x", text: `t${id}`, action: null, speak: true, ...extra });
@@ -35,4 +36,9 @@ test("suggestions are pressable only while riding, once, and while recent", () =
   assert.equal(actionUsable(resume, 12, "running", true, new Set(), false), false, "only while the eased load is waiting for the rider");
   assert.equal(sourceLabel("ai", "llama3.2"), "AI coach · llama3.2");
   assert.equal(sourceLabel("cue"), "Ride cue");
+});
+
+test("power trace breaks at skipped intervals instead of bridging them", () => {
+  assert.deepEqual(traceRuns([[2.5, 90], [7.5, 95], [62.5, 150], [67.5, 152]]).map((r) => r.length), [2, 2]);
+  assert.deepEqual(traceRuns([]), []);
 });

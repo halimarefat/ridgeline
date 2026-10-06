@@ -1,5 +1,10 @@
 # Ridgeline 0.1 preview — release notes
 
+## 0.1.0-preview.4 (2026-10-05)
+
+- **Auto-pause:** stop pedalling for 3 s and the ride pauses (timer and workout stop, the trainer goes to a low load). Start pedalling and it resumes, with the target ramping back in. A ride started before you pedal waits for you ("Ready when you are"). Coasting downhill on a free ride doesn't count. Settings → Trainer & display → Rides; it can be changed mid-ride.
+- **Your power on the workout profile:** the Ride screen's workout chart draws your actual power over the interval blocks, so you can see how closely you're following them. Skipped sections are left as gaps.
+
 ## 0.1.0-preview.3 (2026-10-05)
 
 - **Fix: ERG workouts started before pedalling stayed at about 40 % of the target.** Found on a real ride with a Tacx Flux 2. Low-cadence protection now arms only after you've pedalled at 60+ rpm, and re-arms on every start, resume and reconnect, so a standstill start is never treated as a stall.

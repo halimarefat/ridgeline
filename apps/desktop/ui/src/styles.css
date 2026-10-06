@@ -274,6 +274,10 @@ table.table { width: 100%; border-collapse: collapse; font-variant-numeric: tabu
 .chart-ref { stroke: var(--chalk-3); stroke-dasharray: 4 4; stroke-width: 1; }
 .chart-done { fill: var(--asphalt); opacity: 0.45; }
 .chart-cursor { stroke: var(--chalk); stroke-width: 2; }
+.chart-power { fill: none; stroke: var(--chalk); stroke-width: 2.5; stroke-linejoin: round; stroke-linecap: round; }
+.chart-power-halo { fill: none; stroke: var(--asphalt); stroke-width: 5.5; stroke-linejoin: round; stroke-linecap: round; opacity: 0.85; }
+.chart-trace-legend { position: absolute; left: 8px; top: 4px; display: inline-flex; align-items: center; gap: 6px; font-size: 0.78rem; color: var(--chalk-2); background: color-mix(in srgb, var(--tarmac) 80%, transparent); padding: 1px 6px; border-radius: 4px; }
+.chart-trace-swatch { width: 18px; height: 3px; background: var(--chalk); border-radius: 2px; box-shadow: 0 0 0 1.5px var(--asphalt); }
 .chart-tick { stroke: var(--chalk-3); }
 .chart-text { fill: var(--chalk-3); font-size: 11px; font-family: var(--font); }
 .chart-marker { stroke: var(--bad); stroke-width: 1.5; stroke-dasharray: 3 3; }

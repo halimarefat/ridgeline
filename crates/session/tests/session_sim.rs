@@ -394,3 +394,75 @@ fn starting_or_resuming_from_standstill_is_not_a_low_cadence_stall() {
     let cue = s.coach.feed.iter().find(|f| f.kind == "low_cadence").expect("low-cadence cue");
     assert_eq!(cue.action, Some(rl_session::ride_coach::CueAction::ResumeTarget));
 }
+
+#[test]
+fn auto_pause_waits_for_pedalling_and_resumes_with_a_ramp() {
+    let mut r = Rig::new();
+    r.dm.connect("simulator:sim-cadence", r.t).unwrap();
+    r.sim().rider.cadence_rpm = 0.0;
+    r.idle(8000);
+    let mut s = Session::new("ap".into(), erg_spec(), 0, None);
+    s.start(r.t, 0, &mut r.dm).unwrap();
+    r.ride(&mut s, 10_000);
+    assert_eq!(s.state, SessionState::Paused);
+    assert!(s.auto_paused, "a ride started before pedalling waits for the rider");
+    assert!(s.active_ms <= 4500, "timer stopped: {}", s.active_ms);
+    let pos = s.workout.as_ref().unwrap().pos_s;
+    r.ride(&mut s, 10_000);
+    assert_eq!(s.workout.as_ref().unwrap().pos_s, pos, "workout doesn't advance while paused");
+    assert_eq!(r.mode(), TrainerMode::Erg(0), "low load while paused");
+    // Pedal: resumes by itself and ramps in to the full target.
+    r.sim().rider.cadence_rpm = 88.0;
+    r.ride(&mut s, 4000);
+    assert_eq!(s.state, SessionState::Running);
+    assert!(!s.auto_paused);
+    r.ride(&mut s, 12_000);
+    assert_eq!(r.mode(), TrainerMode::Erg(100));
+    assert!(s.events.iter().any(|e| e.kind == "auto_pause") && s.events.iter().any(|e| e.kind == "auto_resume"));
+    // A manual pause is never auto-resumed, even while pedalling.
+    s.pause(r.t, 0, &mut r.dm);
+    r.ride(&mut s, 5000);
+    assert_eq!(s.state, SessionState::Paused);
+    assert!(!s.auto_paused);
+    s.resume(r.t, 0, &mut r.dm);
+    // Turned off: stopping pedalling doesn't pause.
+    s.auto_pause = false;
+    r.sim().rider.cadence_rpm = 0.0;
+    r.ride(&mut s, 8000);
+    assert_eq!(s.state, SessionState::Running);
+    // Power trace by workout position.
+    let tr = s.power_trace_json();
+    let tr = tr.as_arr().unwrap();
+    assert!(!tr.is_empty());
+    let first = tr[0].as_arr().unwrap();
+    assert!(first[0].as_f64().unwrap() <= 5.0, "buckets are by workout position: {tr:?}");
+    assert!(tr.iter().any(|b| b.as_arr().unwrap()[1].as_f64().unwrap() >= 70.0), "pedalled power is traced: {tr:?}");
+}
+
+#[test]
+fn free_ride_coasting_is_not_auto_paused_but_stopping_is() {
+    let pts = synthetic(LatLon { lat: 0.0, lon: 0.0 }, &[(2000.0, 0.0)], false);
+    let segs = vec![pts];
+    let src = ElevationSource { kind: "synthetic".into(), dataset: String::new(), resolution_m: 0.0, fetched_utc: 0, attribution: String::new() };
+    let prof = Arc::new(process(&RouteInput { segments: &segs, source: src, corrections: &[], flat_fallback: false }, &ProfileConfig::default()).unwrap());
+    let mut r = Rig::new();
+    let mut sp = spec(RideMode::FreeRide);
+    sp.route = Some(("r".into(), "Flat".into(), prof));
+    let mut s = Session::new("ap2".into(), sp, 0, None);
+    s.start(r.t, 0, &mut r.dm).unwrap();
+    r.ride(&mut s, 40_000);
+    assert!(s.route.as_ref().unwrap().v > 5.0);
+    // Stop pedalling: coasting keeps the ride going while the bike rolls.
+    r.sim().rider.cadence_rpm = 0.0;
+    r.ride(&mut s, 6000);
+    assert_eq!(s.state, SessionState::Running, "coasting at {} m/s", s.route.as_ref().unwrap().v);
+    // Once the virtual bike has (nearly) stopped, the ride pauses.
+    for _ in 0..300 {
+        r.ride(&mut s, 1000);
+        if s.state == SessionState::Paused {
+            break;
+        }
+    }
+    assert!(s.auto_paused);
+    assert!(s.route.as_ref().unwrap().v < 1.5);
+}

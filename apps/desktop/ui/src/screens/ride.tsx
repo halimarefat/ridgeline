@@ -286,7 +286,7 @@ function Cockpit({ s }: { s: J }) {
           {s.demo && <span className="demo-flag">DEMO</span>} {title}
         </span>
         <span className="mode">{modeLabel[s.mode]}</span>
-        <Status kind={s.state === "running" ? "ok" : s.state === "paused" ? "warn" : "busy"}>{s.state === "starting" ? "requesting control" : s.state}</Status>
+        <Status kind={s.state === "running" ? "ok" : s.state === "paused" ? "warn" : "busy"}>{s.state === "starting" ? "requesting control" : s.auto_paused ? "auto-paused" : s.state}</Status>
         {s.mode !== "read_only" && <Status kind={ctlState === "controlled" ? "ok" : ctlState === "requesting" ? "busy" : "bad"}>trainer {ctlState?.replace("_", " ")}</Status>}
         <Status kind={s.recording_error ? "bad" : "ok"}>{s.recording_error ? "recording problem" : `recording · ${s.samples} s`}</Status>
         {running && (
@@ -309,6 +309,13 @@ function Cockpit({ s }: { s: J }) {
         </Button>
       </div>
 
+      {s.auto_paused && (
+        <div className="banner banner-info" role="status">
+          <p>
+            <b>{s.active_s < 5 ? "Ready when you are." : "Auto-paused."}</b> Start pedalling to {s.active_s < 5 ? "begin" : "continue"}. The timer and workout wait for you, and the target ramps in once you're moving.
+          </p>
+        </div>
+      )}
       {s.state === "starting" && (
         <div className="banner banner-info">
           <p>Asking the trainer for control. If this takes long, another app may be connected to the trainer.</p>
@@ -384,7 +391,7 @@ function Cockpit({ s }: { s: J }) {
           unit="W"
           main
           sub={
-            s.mode === "erg" && s.target_w != null && !step?.free_effort ? (
+            s.mode === "erg" && s.target_w != null && !step?.free_effort && s.state === "running" ? (
               <>
                 Target <b>{s.target_w} W</b>
                 {wk?.adjust_pct ? ` (${pct(wk.adjust_pct, 0)})` : ""}
@@ -434,7 +441,7 @@ function Cockpit({ s }: { s: J }) {
               Next: {wk.next.label} · {clock(wk.next.dur_s)}
             </p>
           )}
-          <WorkoutChart timeline={wk.timeline} pos={wk.pos_s} height={110} />
+          <WorkoutChart timeline={wk.timeline} pos={wk.pos_s} height={150} ftp={wk.ftp} trace={wk.rpe_mode ? undefined : wk.power_trace} label="Workout profile with your power" />
           <div className="ride-tools" style={{ marginTop: 10 }}>
             <span className="adjust">
               <Button onClick={() => cmd("adjustIntensity", { delta: -5 })} kbd="−" title="Easier by 5%">
