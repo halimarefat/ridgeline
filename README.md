@@ -126,7 +126,7 @@ GitHub Actions (free standard runners, public repository) runs on every push exc
 - a Playwright end-to-end walkthrough of the demo
 - the Linux x64 desktop build
 
-The Windows x64 and macOS universal desktop builds run weekly, on demand (*Run workflow*), on pull requests and in every release. This keeps metered runner minutes low; macOS minutes count 10×. Each built package is then **installed and launched** on its runner, which must report that the UI loaded, talked to the native service and opened demo mode with simulated devices ready. Pushing a `v*` tag, or a `dev` commit whose message contains `[release vX.Y.Z…]`, builds all three platforms and publishes the installers, checksums and smoke-test reports as a GitHub pre-release.
+The Windows x64 and macOS universal desktop builds run weekly, on demand (*Run workflow*), on pull requests from forks and in every release (a pull request from a branch of this repository is covered by its push run). This keeps metered runner minutes low; macOS minutes count 10×. Each built package is then **installed and launched** on its runner, which must report that the UI loaded, talked to the native service and opened demo mode with simulated devices ready. Pushing a `v*` tag, or a `dev` commit whose message contains `[release vX.Y.Z…]`, builds all three platforms and publishes the installers, checksums and smoke-test reports as a GitHub pre-release.
 
 ## Documentation
 
