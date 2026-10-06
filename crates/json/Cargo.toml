@@ -1,0 +1,8 @@
+[package]
+name = "rl-json"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Minimal, dependency-free JSON value type with strict validation (no non-finite numbers, depth/size limits)."
+
+[dependencies]

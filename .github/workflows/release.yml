@@ -1,0 +1,135 @@
+name: Release
+
+# Builds unsigned installers on GitHub's free standard runners and publishes
+# them as a GitHub Release when a version tag (v*) is pushed.
+# Also: a push to dev/main whose head commit message contains "[release vX.Y.Z…]"
+# (used when tags can't be pushed directly).
+on:
+  push:
+    tags: ["v*"]
+    branches: [dev, main]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to create (e.g. v0.1.0-preview.1)"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  meta:
+    name: Release tag
+    if: github.event_name != 'push' || startsWith(github.ref, 'refs/tags/') || contains(github.event.head_commit.message, '[release v')
+    runs-on: ubuntu-24.04
+    outputs:
+      tag: ${{ steps.t.outputs.tag }}
+    steps:
+      - id: t
+        env:
+          INPUT_TAG: ${{ github.event.inputs.tag }}
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+          MSG: ${{ github.event.head_commit.message }}
+        run: |
+          if [ -n "$INPUT_TAG" ]; then TAG="$INPUT_TAG"
+          elif [ "$REF_TYPE" = "tag" ]; then TAG="$REF_NAME"
+          else TAG=$(printf '%s' "$MSG" | grep -o '\[release v[0-9A-Za-z.+-]*\]' | head -n 1 | sed 's/^\[release //; s/\]$//'); fi
+          echo "$TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.]+)?$' || { echo "::error::invalid release tag '$TAG'"; exit 1; }
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Release tag: $TAG"
+
+  build:
+    needs: meta
+    name: Build (${{ matrix.name }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: windows-x64
+            os: windows-latest
+            args: --bundles nsis,msi
+            bundle_dir: apps/desktop/src-tauri/target/release/bundle
+          - name: macos-universal
+            os: macos-latest
+            args: --target universal-apple-darwin --bundles app,dmg
+            bundle_dir: apps/desktop/src-tauri/target/universal-apple-darwin/release/bundle
+          - name: linux-x64
+            os: ubuntu-22.04
+            args: --bundles deb,appimage
+            bundle_dir: apps/desktop/src-tauri/target/release/bundle
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.name == 'macos-universal' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+      - name: Linux system libraries
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev patchelf libdbus-1-dev pkg-config libayatana-appindicator3-dev
+      - name: Install and build UI
+        working-directory: apps/desktop/ui
+        run: |
+          if [ -f package-lock.json ]; then npm ci; else npm install --no-audit --no-fund; fi
+          npm run build
+      - name: Build installers (unsigned)
+        working-directory: apps/desktop
+        run: ./ui/node_modules/.bin/tauri build ${{ matrix.args }}
+      - name: Install the package and launch it (A01 smoke test)
+        run: bash scripts/smoke-installed.sh "${{ matrix.bundle_dir }}" "smoke-${{ matrix.name }}.json"
+      - name: Collect
+        run: |
+          mkdir -p out
+          find "${{ matrix.bundle_dir }}" -type f \( -name '*.exe' -o -name '*.msi' -o -name '*.dmg' -o -name '*.deb' -o -name '*.AppImage' \) -exec cp {} out/ \;
+          cp "smoke-${{ matrix.name }}.json" out/
+          ls -la out
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.name }}
+          path: out/*
+          if-no-files-found: error
+
+  publish:
+    needs: [meta, build]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Checksums and release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        # Errors are repeated as ::error:: annotations, which are public; step logs need a sign-in.
+        run: |
+          set -o pipefail
+          TAG="${{ needs.meta.outputs.tag }}"
+          fail() { sed 's/^/::error::/' "$1" | head -20; exit 1; }
+          ls -la dist
+          cd dist && sha256sum $(ls | grep -v '^smoke-') > SHA256SUMS.txt && cat SHA256SUMS.txt && cd ..
+          # The tag points at the built commit; it is created first so the release never depends on a branch head.
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" > /dev/null; then
+            echo "Tag $TAG already exists"
+          else
+            git tag "$TAG" "$GITHUB_SHA" && git push origin "refs/tags/$TAG" 2> tag.log || fail tag.log
+          fi
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            gh release upload "$TAG" dist/* --clobber 2> gh.log || fail gh.log
+          else
+            for attempt in 1 2; do
+              gh release create "$TAG" dist/* --verify-tag --prerelease \
+                --title "Ridgeline $TAG (unsigned preview)" --notes-file docs/release-notes.md 2> gh.log && break
+              cat gh.log; [ "$attempt" = 2 ] && fail gh.log; sleep 15
+              # A failed attempt can leave a partial release behind.
+              gh release delete "$TAG" --yes > /dev/null 2>&1 || true
+            done
+          fi

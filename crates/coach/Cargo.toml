@@ -1,0 +1,10 @@
+[package]
+name = "rl-coach"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[dependencies]
+rl-json = { path = "../json" }
+rl-domain = { path = "../domain" }
+rl-net = { path = "../net" }

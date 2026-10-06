@@ -1,0 +1,6 @@
+{
+  "identifier": "default",
+  "description": "Main window: core events only. All app functionality goes through the app's own narrow 'rpc' command; no filesystem, shell or HTTP plugins are enabled for web content.",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}

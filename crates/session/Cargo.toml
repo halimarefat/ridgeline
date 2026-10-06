@@ -1,0 +1,10 @@
+[package]
+name = "rl-session"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[dependencies]
+rl-json = { path = "../json" }
+rl-domain = { path = "../domain" }
+rl-device = { path = "../device" }

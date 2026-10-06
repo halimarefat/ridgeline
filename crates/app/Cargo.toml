@@ -1,0 +1,15 @@
+[package]
+name = "rl-app"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+rust-version = "1.89"
+
+[dependencies]
+rl-json = { path = "../json" }
+rl-domain = { path = "../domain" }
+rl-device = { path = "../device" }
+rl-session = { path = "../session" }
+rl-storage = { path = "../storage" }
+rl-net = { path = "../net" }
+rl-coach = { path = "../coach" }

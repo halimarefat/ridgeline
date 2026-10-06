@@ -1,0 +1,10 @@
+[package]
+name = "rl-devserver"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[dependencies]
+rl-json = { path = "../../crates/json" }
+rl-app = { path = "../../crates/app" }
+rl-net = { path = "../../crates/net" }
